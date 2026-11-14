@@ -1,0 +1,34 @@
+{
+  "name": "LocalSub for IINA",
+  "identifier": "io.localsub.iina",
+  "version": "0.1.0",
+  "ghRepo": "junghyukhan/iina-localsub",
+  "ghVersion": 1,
+  "description": "Generate subtitles on your Mac.",
+  "author": {
+    "name": "Junghyuk Han"
+  },
+  "entry": "main.js",
+  "globalEntry": "global.js",
+  "preferencesPage": "preferences.html",
+  "permissions": [
+    "file-system",
+    "show-osd",
+    "show-alert",
+    "network-request"
+  ],
+  "allowedDomains": ["downloads.junghyuk.com"],
+  "preferenceDefaults": {
+    "executablePath": "",
+    "language": "",
+    "autoGenerate": false,
+    "cacheEpoch": "0",
+    "cacheSizeMB": 100,
+    "cacheRevision": "0",
+    "cacheStatus": { "bytes": 0, "message": "" },
+    "jobStatus": { "id": "", "message": "", "busy": false },
+    "installedVersion": "",
+    "toolRequest": { "id": "", "action": "" },
+    "toolStatus": { "busy": true, "message": "Checking LocalSub…" }
+  }
+}

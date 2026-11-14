@@ -1,0 +1,11 @@
+{
+  "name": "iina-localsub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "pack": "node scripts/package.js",
+    "link": "/Applications/IINA.app/Contents/MacOS/iina-plugin link .",
+    "unlink": "/Applications/IINA.app/Contents/MacOS/iina-plugin unlink ."
+  }
+}

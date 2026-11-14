@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LocalSub Settings</title>
+    <style>
+        html body { padding: 20px 24px; line-height: 1.4; }
+        main { display: grid; gap: 22px; }
+        .tool, .field { display: grid; gap: 8px; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .field > label { display: block; }
+        main .pref-help { margin: 0; }
+        input[type="text"] { box-sizing: border-box; inline-size: 100%; min-inline-size: 0; min-block-size: 30px; font: inherit; }
+        input[type="number"] { inline-size: 8em; min-block-size: 30px; font: inherit; }
+        button { font: inherit; min-block-size: 26px; }
+        .toggle { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; }
+        .toggle input { margin: 0; }
+        .toggle .pref-help { grid-column: 2; }
+        summary { padding-block: 4px; }
+        .advanced { display: grid; gap: 14px; margin-block-start: 12px; }
+        #tool-path { overflow-wrap: anywhere; }
+        #tool-path:empty { display: none; }
+        [hidden] { display: none; }
+    </style>
+    <script src="preferences.js" defer></script>
+</head>
+<body>
+    <main aria-label="LocalSub settings">
+        <div class="tool">
+            <p id="tool-status" role="status">Checking LocalSub…</p>
+            <div class="actions">
+                <button id="install-tool" type="button" disabled>Install</button>
+                <button id="check-tool" type="button" disabled>Check for updates</button>
+            </div>
+        </div>
+        <div class="toggle">
+            <input id="auto-generate" name="autoGenerate" type="checkbox" data-pref-key="autoGenerate" aria-describedby="auto-help">
+            <label for="auto-generate">Generate subtitles automatically</label>
+            <p id="auto-help" class="small pref-help">For videos without subtitles.</p>
+        </div>
+        <div class="field">
+            <label for="speech-language">Speech language</label>
+            <p id="language-help" class="small pref-help">Language tag, e.g. en-US or ja.</p>
+            <input id="speech-language" name="language" type="text"
+                data-pref-key="language" aria-describedby="language-help"
+                placeholder="Automatic"
+                autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        </div>
+        <div class="field">
+            <label for="cache-size">Maximum cache size (MB)</label>
+            <input id="cache-size" name="cacheSizeMB" type="number" min="0" max="10240" step="1" required
+                aria-describedby="cache-help" autocomplete="off">
+            <p id="cache-help" class="small pref-help">0 disables caching.</p>
+            <p id="cache-usage" class="small" role="status">Checking cache…</p>
+            <div class="actions"><button id="clear-cache" type="button" disabled>Clear cache</button></div>
+        </div>
+        <p id="generation-status" class="small" role="status" hidden></p>
+        <p class="small pref-help">Transcription stays on your Mac.</p>
+        <details>
+            <summary>Advanced</summary>
+            <div class="advanced">
+                <div class="field">
+                    <label for="executable-path">LocalSub executable</label>
+                    <p id="executable-help" class="small pref-help">Leave blank to use the default installation.</p>
+                    <input id="executable-path" name="executablePath" type="text"
+                        data-pref-key="executablePath" aria-describedby="executable-help"
+                        placeholder="Default"
+                        autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+                    <p id="tool-path" class="small"></p>
+                    <div class="actions"><button id="choose-tool" type="button" disabled>Choose executable…</button></div>
+                </div>
+            </div>
+        </details>
+    </main>
+</body>
+</html>
