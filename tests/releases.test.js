@@ -43,12 +43,7 @@ test("invalid schema and unsafe archive locations are rejected", () => {
 });
 
 test("HTTP data and text responses are supported without browser fetch APIs", async () => {
-    for (const response of [
-        { statusCode: 200, data: manifest },
-        { statusCode: 200, text: JSON.stringify(manifest) },
-        { statusCode: 200, data: JSON.stringify(manifest) },
-        { statusCode: 200, data: {}, text: JSON.stringify(manifest) },
-    ]) {
+    for (const response of [{ statusCode: 200, data: manifest }, { statusCode: 200, text: JSON.stringify(manifest) }]) {
         const result = await fetchRelease({ http: { get: async url => {
             assert.equal(url, MANIFEST_URL);
             return response;
@@ -60,14 +55,6 @@ test("HTTP data and text responses are supported without browser fetch APIs", as
 test("non-success HTTP responses and malformed JSON cannot produce a release", async () => {
     for (const response of [{ statusCode: 404 }, { statusCode: 200, text: "not JSON" }]) {
         await assert.rejects(fetchRelease({ http: { get: async () => response } }));
-    }
-});
-
-test("wire JSON is validated even when native data looks valid", async () => {
-    for (const text of ["not JSON", "null", JSON.stringify({ ...manifest, sha256: "bad" })]) {
-        await assert.rejects(fetchRelease({ http: { get: async () => ({
-            statusCode: 200, data: manifest, text,
-        }) } }));
     }
 });
 

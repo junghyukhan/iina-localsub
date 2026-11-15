@@ -117,13 +117,14 @@ test("CLI updates follow stable.json without plugin configuration changes", asyn
     await f.installer.handle("refresh");
     assert.equal(f.installer.status.version, "0.1.0");
     assert.equal(f.installer.status.releaseVersion, "0.2.0");
+    assert.equal(f.installer.status.message, "LocalSub 0.1.0 (0.2.0 available)");
     assert.equal(f.installer.status.installLabel, "Update");
     assert.equal(f.installer.status.canInstall, true);
     await f.installer.handle("install");
     assert.match(f.downloads[0][0], /\/0\.2\.0\//);
     assert.equal(f.preferences.get("installedVersion"), "0.2.0");
     assert.equal(f.installer.status.canInstall, false);
-    assert.equal(f.installer.status.message, "LocalSub 0.2.0 · Up to date");
+    assert.equal(f.installer.status.message, "LocalSub 0.2.0 (Up to date)");
 });
 
 test("install uses the displayed release even if stable.json changes after the check", async () => {
@@ -257,14 +258,14 @@ test("runnable but unsupported CLIs remain installed without claiming transcript
     assert.match(f.installer.status.message, /Local transcription is unavailable on this Mac/);
 });
 
-test("old or malformed capability queries show the concise unknown status", async () => {
+test("old or malformed capability queries do not clutter the user-facing status", async () => {
     for (const option of [{ capabilityFailure: true }, { capabilityOutput: "not JSON" },
         { capabilityOutput: '{"schemaVersion":2,"localTranscriptionSupported":true}' }]) {
         const f = fixture({ path: managedPath, ...option });
         await f.installer.handle("status");
         assert.equal(f.installer.status.installed, true);
         assert.equal(f.installer.status.capability, "unknown");
-        assert.match(f.installer.status.message, /Capability could not be checked$/);
+        assert.equal(f.installer.status.message, "External LocalSub");
     }
 });
 
