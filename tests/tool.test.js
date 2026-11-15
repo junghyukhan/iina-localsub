@@ -5,10 +5,34 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
-const { lockedRunner } = require("../tool.js");
+const { lockedRunner, queryCapabilities } = require("../tool.js");
 const runner = require("../runner.js");
 const exec = promisify(execFile);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+test("capability queries validate the versioned protocol and distinguish unsupported from unknown", async () => {
+    async function query(result) {
+        return queryCapabilities({ utils: { exec: async (binary, args) => {
+            assert.equal(binary, "/cli");
+            assert.deepEqual(args, ["--capabilities"]);
+            return result;
+        } } }, "/cli");
+    }
+    for (const supported of [true, false]) {
+        assert.deepEqual(await query({ status: 0, stdout: JSON.stringify({
+            schemaVersion: 1, localTranscriptionSupported: supported,
+        }) }), { state: supported ? "supported" : "unsupported" });
+    }
+    for (const stdout of ["", "null", "[]", "Usage: localsub", '{}',
+        '{"schemaVersion":1,"localTranscriptionSupported":"true"}',
+        '{"schemaVersion":1}',
+        '{"schemaVersion":2,"localTranscriptionSupported":true}']) {
+        assert.deepEqual(await query({ status: 0, stdout }), { state: "unknown" });
+    }
+    assert.equal((await query({ status: 2, stdout: "" })).state, "unknown");
+    const api = { utils: { exec: async () => { throw new Error("Cannot execute"); } } };
+    assert.equal((await queryCapabilities(api, "/cli")).state, "unknown");
+});
 
 test("kernel locks defer installation until generation exits without leaving stale locks", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "localsub-lock-test-"));

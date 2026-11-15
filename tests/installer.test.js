@@ -54,6 +54,11 @@ function fixture(options = {}) {
                 } else if (binary === "/bin/rm") {
                     const target = args.at(-1);
                     for (const path of files) if (path === target || path.startsWith(target + "/")) files.delete(path);
+                } else if (args[0] === "--capabilities") {
+                    if (options.capabilityFailure) return { status: 2, stdout: "", stderr: "Unknown option" };
+                    stdout = options.capabilityOutput === undefined ? JSON.stringify({
+                        schemaVersion: 1, localTranscriptionSupported: true,
+                    }) : options.capabilityOutput;
                 } else if (args[0] === "--help") {
                     if (options.executionFailure) return { status: 126, stderr: "Execution blocked by macOS" };
                     stdout = "Usage: localsub [options] FILE";
@@ -216,6 +221,50 @@ test("unsupported OS, minimum OS and architecture never start a download", async
         await f.installer.handle("install");
         assert.equal(f.downloads.length, 0);
         assert.equal(f.installer.status.canInstall, false);
+    }
+});
+
+test("universal releases install on both architectures, including Rosetta's x86_64 environment", async () => {
+    for (const architecture of ["arm64", "x86_64"]) {
+        const f = fixture({ architecture, manifest: manifest("0.2.0", { arch: "universal" }) });
+        await f.installer.handle("install");
+        assert.equal(f.downloads.length, 1);
+        assert.equal(f.installer.status.installed, true);
+        assert.equal(f.installer.status.capability, "supported");
+    }
+    const f = fixture({ architecture: "unknown", manifest: manifest("0.2.0", { arch: "universal" }) });
+    await f.installer.handle("install");
+    assert.equal(f.downloads.length, 0);
+});
+
+test("release metadata alone determines the minimum installation OS", async () => {
+    const f = fixture({ os: "15.5", manifest: manifest("0.2.0", { minimumMacOS: "15.0" }) });
+    await f.installer.handle("install");
+    assert.equal(f.downloads.length, 1);
+    const newer = fixture({ os: "26.0", manifest: manifest("0.2.0", { minimumMacOS: "26.1" }) });
+    await newer.installer.handle("refresh");
+    assert.match(newer.installer.status.message, /Release requires macOS 26.1/);
+    assert.equal(newer.installer.status.canInstall, false);
+});
+
+test("runnable but unsupported CLIs remain installed without claiming transcription support", async () => {
+    const f = fixture({ path: managedPath, capabilityOutput: JSON.stringify({
+        schemaVersion: 1, localTranscriptionSupported: false,
+    }) });
+    await f.installer.handle("status");
+    assert.equal(f.installer.status.installed, true);
+    assert.equal(f.installer.status.capability, "unsupported");
+    assert.match(f.installer.status.message, /Local transcription is unavailable on this Mac/);
+});
+
+test("old or malformed capability queries show the concise unknown status", async () => {
+    for (const option of [{ capabilityFailure: true }, { capabilityOutput: "not JSON" },
+        { capabilityOutput: '{"schemaVersion":2,"localTranscriptionSupported":true}' }]) {
+        const f = fixture({ path: managedPath, ...option });
+        await f.installer.handle("status");
+        assert.equal(f.installer.status.installed, true);
+        assert.equal(f.installer.status.capability, "unknown");
+        assert.match(f.installer.status.message, /Capability could not be checked$/);
     }
 });
 

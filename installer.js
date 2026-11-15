@@ -1,4 +1,4 @@
-const { findExecutable } = require("./tool.js");
+const { findExecutable, queryCapabilities } = require("./tool.js");
 const { SubtitleCache } = require("./cache.js");
 const { fetchRelease, compareVersions, versionParts } = require("./releases.js");
 
@@ -48,6 +48,7 @@ class ToolInstaller {
             try { installed = /Usage: localsub/i.test(await this.exec(path, ["--help"])); }
             catch (_) {}
         }
+        const capability = installed ? await queryCapabilities(this.api, path) : { state: "unknown" };
         const managedPath = this.api.utils.resolvePath("@data/bin/localsub");
         const managed = path === managedPath;
         const storedVersion = this.api.preferences.get("installedVersion") || "";
@@ -58,12 +59,11 @@ class ToolInstaller {
         let canInstall = false;
         let installLabel = "Install";
         let message = installed ? (version ? `LocalSub ${version}` : "External LocalSub") : "LocalSub not installed";
-        if (compareVersions(this.platform.version, "26.0") < 0) {
-            message += " · Requires macOS 26+";
-        } else if (this.updateError) {
+        if (this.updateError) {
             message += ` · Update check failed: ${this.updateError}`;
         } else if (release) {
-            if (release.arch !== this.platform.architecture) {
+            if (release.arch !== this.platform.architecture
+                && !(release.arch === "universal" && ["arm64", "x86_64"].includes(this.platform.architecture))) {
                 message += " · No download for this architecture";
             } else if (compareVersions(this.platform.version, release.minimumMacOS) < 0) {
                 message += ` · Release requires macOS ${release.minimumMacOS}+`;
@@ -79,7 +79,10 @@ class ToolInstaller {
                 else if (installed && managed && comparison > 0) installLabel = "Update";
             }
         }
-        this.publish(message, { installed, managed, path: path || "", version, managedVersion,
+        if (installed && capability.state === "unknown") message += " · Capability could not be checked";
+        if (installed && capability.state === "unsupported") message += " · Local transcription is unavailable on this Mac";
+        this.publish(message, { installed, capability: capability.state,
+            managed, path: path || "", version, managedVersion,
             canInstall, installLabel, releaseVersion: release ? release.version : "",
             downloadConfigured: compatible });
     }

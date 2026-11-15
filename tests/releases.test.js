@@ -20,6 +20,13 @@ test("published manifest schema is accepted and its archive format inferred", ()
     assert.deepEqual(validateManifest(manifest), { ...manifest, format: "tar.gz" });
 });
 
+test("universal and Intel release metadata is accepted", () => {
+    for (const arch of ["universal", "x86_64"]) {
+        const value = { ...manifest, arch, url: manifest.url.replace("arm64", arch) };
+        assert.equal(validateManifest(value).arch, arch);
+    }
+});
+
 test("invalid schema and unsafe archive locations are rejected", () => {
     for (const fields of [
         { version: "0.1" }, { version: "01.1.0" }, { version: "1.0.0-beta" },
