@@ -1,9 +1,9 @@
 {
   "name": "LocalSub for IINA",
   "identifier": "io.localsub.iina",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "ghRepo": "junghyukhan/iina-localsub",
-  "ghVersion": 1,
+  "ghVersion": 2,
   "description": "Generate subtitles on your Mac.",
   "author": {
     "name": "Junghyuk Han"
