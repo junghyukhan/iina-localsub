@@ -72,14 +72,13 @@ class ToolInstaller {
                 const comparison = managedVersion ? compareVersions(release.version, managedVersion) : 1;
                 canInstall = comparison >= 0 && (!installed || !managed || comparison > 0);
                 if (comparison < 0) message += " · Installed version is newer";
-                else if (installed && managed && comparison === 0) message += " · Up to date";
-                else if (installed) message += ` · ${release.version} available`;
+                else if (installed && managed && comparison === 0) message += " (Up to date)";
+                else if (installed) message += ` (${release.version} available)`;
                 else message = `LocalSub ${release.version} available`;
                 if (installed && !managed) installLabel = "Install managed copy";
                 else if (installed && managed && comparison > 0) installLabel = "Update";
             }
         }
-        if (installed && capability.state === "unknown") message += " · Capability could not be checked";
         if (installed && capability.state === "unsupported") message += " · Local transcription is unavailable on this Mac";
         this.publish(message, { installed, capability: capability.state,
             managed, path: path || "", version, managedVersion,
