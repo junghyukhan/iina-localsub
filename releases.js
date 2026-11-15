@@ -19,7 +19,7 @@ function compareVersions(left, right) {
 function validateManifest(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)
         || !versionParts(value.version) || value.version.split(".").length !== 3
-        || value.platform !== "macos" || !["arm64", "x86_64"].includes(value.arch)
+        || value.platform !== "macos" || !["arm64", "x86_64", "universal"].includes(value.arch)
         || !versionParts(value.minimumMacOS)
         || typeof value.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(value.sha256)) {
         throw new Error("The CLI update manifest is invalid.");

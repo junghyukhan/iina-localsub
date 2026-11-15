@@ -296,6 +296,36 @@ test("manual generation runs the CLI and attaches subtitles without reopening me
     assert.equal(f.plugin.generateItem.enabled, true);
 });
 
+test("unsupported recognition stops before creating a worker but cached subtitles still load", async () => {
+    const f = fixture();
+    const exec = f.api.utils.exec;
+    f.api.utils.exec = async (binary, args) => args[0] === "--capabilities"
+        ? { status: 0, stdout: JSON.stringify({ schemaVersion: 1,
+            localTranscriptionSupported: false }) }
+        : exec(binary, args);
+    await f.plugin.generate();
+    assert.equal(f.calls.some(([binary]) => binary === "/usr/bin/mktemp" || binary === "/bin/sh"), false);
+    assert.match(f.messages.at(-1), /Local transcription is unavailable/);
+    assert.equal(f.settings.get("jobStatus").busy, false);
+    enableCache(f, true);
+    await f.plugin.generate();
+    assert.equal(f.commands[0][0], "sub-add");
+});
+
+test("cancellation during capability inspection prevents launching generation", async () => {
+    const f = fixture();
+    const inspection = deferred();
+    const exec = f.api.utils.exec;
+    f.api.utils.exec = async (binary, args) => args[0] === "--capabilities" ? inspection.promise : exec(binary, args);
+    const pending = f.plugin.generate();
+    await f.tick();
+    f.plugin.cancel(false);
+    inspection.resolve({ status: 0, stdout: JSON.stringify({ schemaVersion: 1,
+        localTranscriptionSupported: true }) });
+    await pending;
+    assert.equal(f.calls.length, 0);
+});
+
 test("managed CLI generation runs its supervisor under the update lock", async () => {
     const f = fixture();
     f.settings.set("executablePath", "/private/data/bin/localsub");

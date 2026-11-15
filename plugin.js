@@ -1,5 +1,5 @@
 const runner = require("./runner.js");
-const { findExecutable, lockedRunner } = require("./tool.js");
+const { findExecutable, queryCapabilities, lockedRunner } = require("./tool.js");
 const { resolveLanguage } = require("./language.js");
 const { SubtitleCache } = require("./cache.js");
 
@@ -142,6 +142,11 @@ class LocalSubPlugin {
             if (cached && await this.cache.unchanged(entry) && this.cache.lookup(entry)) {
                 if (this.usable(job)) this.attach(job, cached, true);
                 return;
+            }
+            const capability = await queryCapabilities(this.api, binary);
+            if (!this.usable(job)) return;
+            if (capability.state === "unsupported") {
+                throw new Error("Local transcription is unavailable on this Mac.");
             }
             this.status(job, "Generating subtitles…", true);
             this.notify("Generating subtitles…");
