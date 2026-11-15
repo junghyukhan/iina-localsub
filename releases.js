@@ -36,8 +36,10 @@ async function fetchRelease(api) {
     const response = await api.http.get(MANIFEST_URL, { headers: { "Cache-Control": "no-cache" } });
     if (!response || response.statusCode !== 200) throw new Error("Could not retrieve the CLI update manifest.");
     let value = response.data;
-    if (value == null) {
-        try { value = JSON.parse(response.text); }
+    const source = typeof response.text === "string" ? response.text
+        : typeof value === "string" ? value : null;
+    if (source !== null) {
+        try { value = JSON.parse(source); }
         catch (_) { throw new Error("The CLI update manifest is not valid JSON."); }
     }
     return validateManifest(value);
