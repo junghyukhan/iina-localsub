@@ -9,11 +9,71 @@ function errorMessage(error) {
     return String(error);
 }
 
+function describeTool({
+    path,
+    installed,
+    managed,
+    managedVersion,
+    capability,
+    platform,
+    release,
+    updateError,
+}) {
+    const version = managed ? managedVersion : "";
+    let compatible = false;
+    let canInstall = false;
+    let installLabel = "Install";
+    let message = installed
+        ? version
+            ? `LocalSub ${version}`
+            : "External LocalSub"
+        : "LocalSub not installed";
+    if (updateError) {
+        message += ` · Update check failed: ${updateError}`;
+    } else if (release) {
+        if (
+            release.arch !== platform.architecture &&
+            !(release.arch === "universal" && ["arm64", "x86_64"].includes(platform.architecture))
+        ) {
+            message += " · No download for this architecture";
+        } else if (compareVersions(platform.version, release.minimumMacOS) < 0) {
+            const requirement = `${release.version} requires macOS ${release.minimumMacOS} or later`;
+            message = installed ? `${message} (${requirement})` : `LocalSub ${requirement}`;
+        } else {
+            compatible = true;
+            const comparison = managedVersion
+                ? compareVersions(release.version, managedVersion)
+                : 1;
+            canInstall = comparison >= 0 && (!installed || !managed || comparison > 0);
+            if (comparison < 0) message += " · Installed version is newer";
+            else if (installed && managed && comparison === 0) message += " (Up to date)";
+            else if (installed) message += ` (${release.version} available)`;
+            else message = `LocalSub ${release.version} available`;
+            if (installed && !managed) installLabel = "Install managed copy";
+            else if (installed && managed && comparison > 0) installLabel = "Update";
+        }
+    }
+    if (installed && capability.state === "unsupported")
+        message += " · On-device subtitle generation isn’t supported on this Mac.";
+    return {
+        message,
+        installed,
+        capability: capability.state,
+        managed,
+        path: path || "",
+        version,
+        managedVersion,
+        canInstall,
+        installLabel,
+        releaseVersion: release ? release.version : "",
+        downloadConfigured: compatible,
+    };
+}
+
 class ToolInstaller {
     constructor(api) {
         this.api = api;
-        this.release = null;
-        this.updateError = "";
+        this.update = { release: null, error: "" };
         this.busy = false;
         this.platform = null;
         this.status = {};
@@ -38,13 +98,10 @@ class ToolInstaller {
             this.platform = { architecture, version };
         }
         if (checkUpdates) {
-            // An unsuccessful check must not leave a stale release installable.
-            this.release = null;
-            this.updateError = "";
             try {
-                this.release = await fetchRelease(this.api);
+                this.update = { release: await fetchRelease(this.api), error: "" };
             } catch (error) {
-                this.updateError = errorMessage(error);
+                this.update = { release: null, error: errorMessage(error) };
             }
         }
         const path = findExecutable(this.api);
@@ -64,58 +121,19 @@ class ToolInstaller {
             this.api.utils.fileInPath(managedPath) && versionParts(storedVersion)
                 ? storedVersion
                 : "";
-        const version = managed ? managedVersion : "";
-        const release = this.release;
-        let compatible = false;
-        let canInstall = false;
-        let installLabel = "Install";
-        let message = installed
-            ? version
-                ? `LocalSub ${version}`
-                : "External LocalSub"
-            : "LocalSub not installed";
-        if (this.updateError) {
-            message += ` · Update check failed: ${this.updateError}`;
-        } else if (release) {
-            if (
-                release.arch !== this.platform.architecture &&
-                !(
-                    release.arch === "universal" &&
-                    ["arm64", "x86_64"].includes(this.platform.architecture)
-                )
-            ) {
-                message += " · No download for this architecture";
-            } else if (compareVersions(this.platform.version, release.minimumMacOS) < 0) {
-                const requirement = `${release.version} requires macOS ${release.minimumMacOS} or later`;
-                message = installed ? `${message} (${requirement})` : `LocalSub ${requirement}`;
-            } else {
-                compatible = true;
-                const comparison = managedVersion
-                    ? compareVersions(release.version, managedVersion)
-                    : 1;
-                canInstall = comparison >= 0 && (!installed || !managed || comparison > 0);
-                if (comparison < 0) message += " · Installed version is newer";
-                else if (installed && managed && comparison === 0) message += " (Up to date)";
-                else if (installed) message += ` (${release.version} available)`;
-                else message = `LocalSub ${release.version} available`;
-                if (installed && !managed) installLabel = "Install managed copy";
-                else if (installed && managed && comparison > 0) installLabel = "Update";
-            }
-        }
-        if (installed && capability.state === "unsupported")
-            message += " · On-device subtitle generation isn’t supported on this Mac.";
-        this.publish(message, {
+        const { release, error: updateError } = this.update;
+        const { message, ...status } = describeTool({
+            path,
             installed,
-            capability: capability.state,
             managed,
-            path: path || "",
-            version,
             managedVersion,
-            canInstall,
-            installLabel,
-            releaseVersion: release ? release.version : "",
-            downloadConfigured: compatible,
+            capability,
+            platform: this.platform,
+            release,
+            updateError,
         });
+        this.publish(message, status);
+        return { status, release, updateError };
     }
 
     async handle(action, requestId = "") {
@@ -141,13 +159,10 @@ class ToolInstaller {
                 await this.inspect();
             } else if (action === "install") {
                 // Keep installation pinned to the release shown in Settings.
-                await this.inspect(!this.release);
-                if (!this.status.downloadConfigured)
-                    throw new Error(
-                        this.updateError || "No compatible LocalSub download is available.",
-                    );
-                if (!this.status.canInstall) return;
-                const release = this.release;
+                const { status, release, updateError } = await this.inspect(!this.update.release);
+                if (!status.downloadConfigured)
+                    throw new Error(updateError || "No compatible LocalSub download is available.");
+                if (!status.canInstall) return;
                 await this.install(release, () => {
                     committed = true;
                 });

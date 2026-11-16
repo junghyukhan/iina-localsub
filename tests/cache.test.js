@@ -107,6 +107,18 @@ test("zero cache budget bypasses reuse and publication", async () =>
         assert.equal(await f.cache.store(entry, f.source, () => true), null);
     }));
 
+test("staging cleanup failure does not hide a successfully published subtitle", async () =>
+    withCache(async f => {
+        const entry = await f.cache.prepare(f.input, f.binary, "en-US");
+        const exec = f.api.utils.exec;
+        f.api.utils.exec = async (file, args) => {
+            if (file === "/bin/rm") throw new Error("Cannot remove staging file");
+            return exec(file, args);
+        };
+        assert.equal(await f.cache.store(entry, f.source, () => true), entry.path);
+        assert.equal(fs.readFileSync(entry.path, "utf8"), srt);
+    }));
+
 test("oversized subtitles remain temporary instead of consuming the cache budget", async () =>
     withCache(async f => {
         f.preferences.set("cacheSizeMB", 1);
@@ -330,6 +342,17 @@ test("clearing rotates the namespace so in-flight jobs cannot refill it", async 
         const fresh = await f.cache.prepare(f.input, f.binary, "en-US");
         assert.notEqual(fresh.path, old.path);
         assert.equal(await f.cache.store(fresh, f.source, () => true), fresh.path);
+    }));
+
+test("failed deletion after epoch rotation still marks the cache dirty", async () =>
+    withCache(async f => {
+        const entry = await f.cache.prepare(f.input, f.binary, "en-US");
+        await f.cache.store(entry, f.source, () => true);
+        const revision = f.preferences.get("cacheRevision");
+        f.api.utils.exec = async () => ({ status: 1, stderr: "permission denied" });
+        await assert.rejects(f.cache.clear(), /permission denied/);
+        assert.equal(f.cache.lookup(entry), null);
+        assert.notEqual(f.preferences.get("cacheRevision"), revision);
     }));
 
 test("clear during publication removes stale results without touching the new namespace", async () =>

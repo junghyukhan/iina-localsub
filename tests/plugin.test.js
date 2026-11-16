@@ -222,6 +222,34 @@ test("source changes during transcription discard the result rather than cache o
     assert.match(f.messages.at(-1), /media file changed/);
 });
 
+test("cancellation during the final media check never attempts cache publication", {
+    timeout: 5000,
+}, async () => {
+    const f = fixture();
+    enableCache(f);
+    const checking = deferred();
+    const unchanged = deferred();
+    f.plugin.cache.unchanged = () => {
+        checking.resolve();
+        return unchanged.promise;
+    };
+    let stores = 0;
+    f.plugin.cache.store = async () => {
+        stores++;
+        return null;
+    };
+    const pending = f.plugin.generate();
+    await f.tick();
+    f.complete();
+    await checking.promise;
+    f.plugin.cancel(false);
+    unchanged.resolve(true);
+    await pending;
+    assert.equal(stores, 0);
+    assert.equal(f.commands.length, 0);
+    assert.equal(f.files.size, 0);
+});
+
 test("opt-in auto-generation starts once after a local video loads", async () => {
     const f = fixture();
     f.settings.set("autoGenerate", true);
@@ -274,6 +302,16 @@ test("a missing CLI warns once per automatic session while manual retries remain
     f.events.get("iina.file-loaded")();
     await f.flushAuto();
     assert.match(f.messages.at(-1), /Install or choose LocalSub in plugin settings/);
+});
+
+test("an automatic timer does not retry a manual attempt that failed before creating a job", async () => {
+    const f = fixture();
+    f.settings.set("autoGenerate", true);
+    f.api.utils.fileInPath = () => false;
+    f.events.get("iina.file-loaded")();
+    await assert.rejects(f.plugin.generate(), /Install or choose LocalSub/);
+    await f.flushAuto();
+    assert.equal(f.messages.length, 0);
 });
 
 test("auto-generation skips disabled subtitle tracks and network media", async () => {
@@ -550,6 +588,22 @@ test("cancellation during temporary directory creation removes the directory wit
     );
     assert.equal(f.files.size, 0);
     assert.equal(f.plugin.job, null);
+});
+
+test("an unexpected temporary path is never used or recursively removed", async () => {
+    const f = fixture();
+    const unexpected = "/private/tmp/unrelated";
+    f.files.set(unexpected, "");
+    const exec = f.api.utils.exec;
+    f.api.utils.exec = (binary, args) =>
+        binary === "/usr/bin/mktemp" ? { status: 0, stdout: unexpected } : exec(binary, args);
+    await f.plugin.generate();
+    assert.match(f.messages.at(-1), /Cannot locate the temporary subtitle directory/);
+    assert.equal(f.files.has(unexpected), true);
+    assert.equal(
+        f.calls.some(([file]) => file === "/bin/sh" || file === "/bin/rm"),
+        false,
+    );
 });
 
 test("window closure cancels a job and avoids later OSDs", async () => {

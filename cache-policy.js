@@ -22,7 +22,7 @@ class CachePolicy {
         );
     }
 
-    async prune() {
+    async prune(limit = this.limit()) {
         const root = this.api.utils.resolvePath("@data/subtitles");
         let bytes = 0;
         try {
@@ -57,7 +57,7 @@ class CachePolicy {
                 bytes = entries.reduce((sum, entry) => sum + entry.size, 0);
                 entries.sort((a, b) => a.used - b.used || a.path.localeCompare(b.path));
                 for (const entry of entries) {
-                    if (bytes <= this.limit()) break;
+                    if (bytes <= limit) break;
                     const removed = await this.api.utils.exec("/bin/rm", ["-f", "--", entry.path]);
                     if (removed.status !== 0)
                         throw new Error(removed.stderr || "Cannot trim subtitle cache.");
@@ -85,15 +85,13 @@ function createCacheMaintenance(api) {
     let retryAt = 0;
     let busy = false;
     return async () => {
-        const signature = JSON.stringify([
-            api.preferences.get("cacheSizeMB"),
-            api.preferences.get("cacheRevision"),
-        ]);
+        const limit = policy.limit();
+        const signature = JSON.stringify([limit, api.preferences.get("cacheRevision")]);
         if (busy || signature === completed || (signature === failed && Date.now() < retryAt))
             return;
         busy = true;
         try {
-            if (await policy.prune()) {
+            if (await policy.prune(limit)) {
                 completed = signature;
                 failed = "";
             } else {
@@ -110,6 +108,4 @@ module.exports = {
     CachePolicy,
     createCacheMaintenance,
     cacheLimitMB,
-    DEFAULT_CACHE_MB,
-    MAX_CACHE_MB,
 };
