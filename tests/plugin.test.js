@@ -305,7 +305,7 @@ test("unsupported recognition stops before creating a worker but cached subtitle
         : exec(binary, args);
     await f.plugin.generate();
     assert.equal(f.calls.some(([binary]) => binary === "/usr/bin/mktemp" || binary === "/bin/sh"), false);
-    assert.match(f.messages.at(-1), /Local transcription is unavailable/);
+    assert.match(f.messages.at(-1), /On-device subtitle generation isn’t supported on this Mac\./);
     assert.equal(f.settings.get("jobStatus").busy, false);
     enableCache(f, true);
     await f.plugin.generate();

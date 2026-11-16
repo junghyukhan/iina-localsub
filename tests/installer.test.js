@@ -104,6 +104,9 @@ test("verified archives install privately, retain the license and clean staging"
     assert.equal(f.installer.status.installed, true);
     assert.equal(f.installer.status.canInstall, false);
     assert.ok(f.files.has(managedPath + ".LICENSE"));
+    const publication = f.calls.find(([binary]) => binary === "/usr/bin/lockf");
+    assert.deepEqual(publication[1].slice(0, 3), ["-k", "/private/data/bin/.localsub.lock", "/bin/sh"]);
+    assert.equal(publication[1].includes("-t"), false);
     const binaries = f.calls.map(([binary]) => binary);
     assert.ok(binaries.indexOf("/usr/bin/shasum") < binaries.indexOf("/usr/bin/tar"));
     assert.ok(binaries.indexOf("/usr/bin/tar") < binaries.indexOf("/bin/chmod"));
@@ -244,8 +247,17 @@ test("release metadata alone determines the minimum installation OS", async () =
     assert.equal(f.downloads.length, 1);
     const newer = fixture({ os: "26.0", manifest: manifest("0.2.0", { minimumMacOS: "26.1" }) });
     await newer.installer.handle("refresh");
-    assert.match(newer.installer.status.message, /Release requires macOS 26.1/);
+    assert.equal(newer.installer.status.message, "LocalSub 0.2.0 requires macOS 26.1 or later");
     assert.equal(newer.installer.status.canInstall, false);
+});
+
+test("incompatible updates identify the release and required macOS without replacing the installed CLI", async () => {
+    const f = fixture({ path: managedPath, version: "0.1.0", os: "15.5", manifest: manifest("0.2.0") });
+    await f.installer.handle("refresh");
+    assert.equal(f.installer.status.message, "LocalSub 0.1.0 (0.2.0 requires macOS 26.0 or later)");
+    assert.equal(f.installer.status.canInstall, false);
+    assert.equal(f.installer.status.downloadConfigured, false);
+    assert.equal(f.downloads.length, 0);
 });
 
 test("runnable but unsupported CLIs remain installed without claiming transcription support", async () => {
@@ -255,26 +267,16 @@ test("runnable but unsupported CLIs remain installed without claiming transcript
     await f.installer.handle("status");
     assert.equal(f.installer.status.installed, true);
     assert.equal(f.installer.status.capability, "unsupported");
-    assert.match(f.installer.status.message, /Local transcription is unavailable on this Mac/);
+    assert.match(f.installer.status.message, /On-device subtitle generation isn’t supported on this Mac\./);
 });
 
-test("old or malformed capability queries do not clutter the user-facing status", async () => {
-    for (const option of [{ capabilityFailure: true }, { capabilityOutput: "not JSON" },
-        { capabilityOutput: '{"schemaVersion":2,"localTranscriptionSupported":true}' }]) {
-        const f = fixture({ path: managedPath, ...option });
-        await f.installer.handle("status");
-        assert.equal(f.installer.status.installed, true);
-        assert.equal(f.installer.status.capability, "unknown");
-        assert.equal(f.installer.status.message, "External LocalSub");
-    }
-});
-
-test("publication waits on the same kernel lock used by managed generation", async () => {
-    const f = fixture();
-    await f.installer.handle("install");
-    const publication = f.calls.find(([binary]) => binary === "/usr/bin/lockf");
-    assert.deepEqual(publication[1].slice(0, 3), ["-k", "/private/data/bin/.localsub.lock", "/bin/sh"]);
-    assert.equal(publication[1].includes("-t"), false);
+test("unknown capability does not clutter the user-facing status", async () => {
+    // Protocol failure variants are covered by tool.test.js.
+    const f = fixture({ path: managedPath, capabilityFailure: true });
+    await f.installer.handle("status");
+    assert.equal(f.installer.status.installed, true);
+    assert.equal(f.installer.status.capability, "unknown");
+    assert.equal(f.installer.status.message, "External LocalSub");
 });
 
 test("native executable chooser verifies and stores the selected path", async () => {

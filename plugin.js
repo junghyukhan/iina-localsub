@@ -146,7 +146,7 @@ class LocalSubPlugin {
             const capability = await queryCapabilities(this.api, binary);
             if (!this.usable(job)) return;
             if (capability.state === "unsupported") {
-                throw new Error("Local transcription is unavailable on this Mac.");
+                throw new Error("On-device subtitle generation isn’t supported on this Mac.");
             }
             this.status(job, "Generating subtitles…", true);
             this.notify("Generating subtitles…");
