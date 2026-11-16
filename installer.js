@@ -66,7 +66,8 @@ class ToolInstaller {
                 && !(release.arch === "universal" && ["arm64", "x86_64"].includes(this.platform.architecture))) {
                 message += " · No download for this architecture";
             } else if (compareVersions(this.platform.version, release.minimumMacOS) < 0) {
-                message += ` · Release requires macOS ${release.minimumMacOS}+`;
+                const requirement = `${release.version} requires macOS ${release.minimumMacOS} or later`;
+                message = installed ? `${message} (${requirement})` : `LocalSub ${requirement}`;
             } else {
                 compatible = true;
                 const comparison = managedVersion ? compareVersions(release.version, managedVersion) : 1;
@@ -79,7 +80,7 @@ class ToolInstaller {
                 else if (installed && managed && comparison > 0) installLabel = "Update";
             }
         }
-        if (installed && capability.state === "unsupported") message += " · Local transcription is unavailable on this Mac";
+        if (installed && capability.state === "unsupported") message += " · On-device subtitle generation isn’t supported on this Mac.";
         this.publish(message, { installed, capability: capability.state,
             managed, path: path || "", version, managedVersion,
             canInstall, installLabel, releaseVersion: release ? release.version : "",

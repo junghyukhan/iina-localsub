@@ -101,28 +101,22 @@ test("disabling caching during publication removes the result and preserves temp
     assert.equal(typeof f.preferences.get("cacheRevision"), "string");
 }));
 
-test("cache reuse refreshes recency without changing the identity", async () => withCache(async f => {
-    const entry = await f.cache.prepare(f.input, f.binary, "en-US");
-    await f.cache.store(entry, f.source, () => true);
-    fs.utimesSync(entry.path, 1, 1);
-    assert.equal(f.cache.lookup(entry), entry.path);
-    assert.ok(fs.statSync(entry.path).mtimeMs > 1000);
-    assert.equal((await f.cache.prepare(f.input, f.binary, "en-US")).path, entry.path);
-}));
-
 test("empty and malformed cache files are not treated as subtitles", () => {
     assert.equal(validSubtitle(srt), true);
     assert.equal(validSubtitle("\r\n" + srt.replaceAll("\n", "\r\n")), true);
     for (const value of ["", "text", "1\n00:00:00,000 --> 00:00:01,000\n", null]) assert.equal(validSubtitle(value), false);
 });
 
-test("unchanged media, executable and language resolve to the same persistent entry", async () => withCache(async f => {
+test("cache entries persist across instances and reuse refreshes recency without changing identity", async () => withCache(async f => {
     const first = await f.cache.prepare(f.input, f.binary, "en-US");
     const second = await new SubtitleCache(f.api).prepare(f.input, f.binary, "en-US");
     assert.equal(first.path, second.path);
     assert.equal(f.cache.lookup(first), null);
     assert.equal(await f.cache.store(first, f.source, () => true), first.path);
+    fs.utimesSync(first.path, 1, 1);
     assert.equal(new SubtitleCache(f.api).lookup(second), first.path);
+    assert.ok(fs.statSync(first.path).mtimeMs > 1000);
+    assert.equal((await f.cache.prepare(f.input, f.binary, "en-US")).path, first.path);
     assert.equal(fs.statSync(first.path).mode & 0o777, 0o600);
     assert.equal(fs.statSync(first.root).mode & 0o777, 0o700);
     assert.deepEqual(fs.readdirSync(first.root), [path.basename(first.path)]);

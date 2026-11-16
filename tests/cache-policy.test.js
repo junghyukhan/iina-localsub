@@ -38,23 +38,15 @@ test("cache budgets accept only whole MB values within bounds", () => {
     for (const value of [0, 1, 100, 10240]) assert.equal(cacheLimitMB(value), value);
 });
 
-test("native maintenance evicts least recently used files across cache epochs", () => fixture(async f => {
+test("native maintenance honors sub-second recency across epochs and keeps files within budget", () => fixture(async f => {
     const old = f.put("old", 600000, 10, "old-epoch");
-    const middle = f.put("middle", 600000, 20);
-    const recent = f.put("recent", 600000, 30);
+    const middle = f.put("middle", 600000, 20.1);
+    const recent = f.put("recent", 600000, 20.9);
     await f.policy.prune();
     assert.equal(fs.existsSync(old), false);
     assert.equal(fs.existsSync(middle), false);
     assert.equal(fs.existsSync(recent), true);
     assert.equal(f.prefs.get("cacheStatus").bytes, 600000);
-}));
-
-test("sub-second recency is honored and files within the budget are kept", () => fixture(async f => {
-    const old = f.put("old", 600000, 1000.1);
-    const recent = f.put("recent", 600000, 1000.9);
-    await f.policy.prune();
-    assert.equal(fs.existsSync(old), false);
-    assert.equal(fs.existsSync(recent), true);
     await f.policy.prune();
     assert.equal(fs.existsSync(recent), true);
 }));
