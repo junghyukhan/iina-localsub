@@ -1,9 +1,9 @@
 {
   "name": "LocalSub for IINA",
   "identifier": "io.localsub.iina",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "ghRepo": "junghyukhan/iina-localsub",
-  "ghVersion": 4,
+  "ghVersion": 5,
   "description": "Generate subtitles locally without interrupting playback.",
   "author": {
     "name": "Junghyuk Han"
