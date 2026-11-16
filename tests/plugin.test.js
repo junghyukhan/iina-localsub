@@ -4,7 +4,9 @@ const { LocalSubPlugin } = require("../plugin.js");
 
 function deferred() {
     let resolve;
-    const promise = new Promise(yes => { resolve = yes; });
+    const promise = new Promise(yes => {
+        resolve = yes;
+    });
     return { promise, resolve };
 }
 
@@ -15,32 +17,54 @@ function fixture() {
     const commands = [];
     const messages = [];
     const menuItems = [];
-    const settings = new Map([["executablePath", "/tools/localsub"], ["language", ""]]);
+    const settings = new Map([
+        ["executablePath", "/tools/localsub"],
+        ["language", ""],
+    ]);
     const process = deferred();
     let next = 0;
     let initializing = true;
     let menuUpdates = 0;
     const api = {
-        core: { status: { idle: false, isNetworkResource: false, url: "file:///video.mp4" }, osd: message => messages.push(message) },
-        mpv: { path: "/video.mp4", getString() { return this.path; }, getNative: () => [], command: (name, args) => commands.push([name, args]) },
+        core: {
+            status: { idle: false, isNetworkResource: false, url: "file:///video.mp4" },
+            osd: message => messages.push(message),
+        },
+        mpv: {
+            path: "/video.mp4",
+            getString() {
+                return this.path;
+            },
+            getNative: () => [],
+            command: (name, args) => commands.push([name, args]),
+        },
         file: {
             exists: path => files.has(path),
             read: path => files.get(path),
             write: (path, text) => files.set(path, text),
         },
         console: { log() {}, error() {} },
-        preferences: { get: key => settings.get(key), set: (key, value) => settings.set(key, value), sync() {} },
+        preferences: {
+            get: key => settings.get(key),
+            set: (key, value) => settings.set(key, value),
+            sync() {},
+        },
         menu: {
             item: (title, action) => ({ title, action, enabled: true }),
             addItem: item => menuItems.push(item),
             forceUpdate() {
-                assert.equal(initializing, false, "native menu rebuilding during plugin initialization crashes IINA");
+                assert.equal(
+                    initializing,
+                    false,
+                    "native menu rebuilding during plugin initialization crashes IINA",
+                );
                 menuUpdates += 1;
             },
         },
         event: { on: (event, action) => events.set(event, action) },
         utils: {
-            resolvePath: path => path.replace("@tmp/", "/private/tmp/plugin/").replace("@data/", "/private/data/"),
+            resolvePath: path =>
+                path.replace("@tmp/", "/private/tmp/plugin/").replace("@data/", "/private/data/"),
             fileInPath: () => true,
             exec: async (file, args) => {
                 calls.push([file, args]);
@@ -66,19 +90,47 @@ function fixture() {
     let scheduled = [];
     const plugin = new LocalSubPlugin(api, {
         cache: { prepare: async () => null },
-        schedule: fn => { scheduled.push(fn); return fn; },
-        unschedule: fn => { scheduled = scheduled.filter(item => item !== fn); },
+        schedule: fn => {
+            scheduled.push(fn);
+            return fn;
+        },
+        unschedule: fn => {
+            scheduled = scheduled.filter(item => item !== fn);
+        },
     });
     plugin.install();
     initializing = false;
     const tick = () => new Promise(resolve => setImmediate(resolve));
     function complete(status = 0, stderr = "") {
-        files.set(plugin.job.directory + "/subtitles.srt", "1\n00:00:00,000 --> 00:00:01,000\nHello.\n");
+        files.set(
+            plugin.job.directory + "/subtitles.srt",
+            "1\n00:00:00,000 --> 00:00:01,000\nHello.\n",
+        );
         process.resolve({ status, stdout: "", stderr });
     }
-    return { api, plugin, events, files, calls, commands, messages, settings, process, tick, complete, menuItems,
+    return {
+        api,
+        plugin,
+        events,
+        files,
+        calls,
+        commands,
+        messages,
+        settings,
+        process,
+        tick,
+        complete,
+        menuItems,
         menuUpdates: () => menuUpdates,
-        flushAuto: async () => { const tasks = scheduled; scheduled = []; tasks.forEach(fn => fn()); await tick(); } };
+        flushAuto: async () => {
+            const tasks = scheduled;
+            scheduled = [];
+            tasks.forEach(fn => {
+                fn();
+            });
+            await tick();
+        },
+    };
 }
 
 function enableCache(f, hit = false) {
@@ -87,10 +139,13 @@ function enableCache(f, hit = false) {
     const entry = { path };
     if (hit) f.files.set(path, "saved subtitles");
     f.plugin.cache = {
-        prepare: async (...args) => { calls.push(args); return entry; },
-        lookup: () => f.files.has(path) ? path : null,
+        prepare: async (...args) => {
+            calls.push(args);
+            return entry;
+        },
+        lookup: () => (f.files.has(path) ? path : null),
         unchanged: async () => true,
-        store: async (entry, source, valid) => {
+        store: async (_entry, source, valid) => {
             if (!valid()) return null;
             f.files.set(path, f.files.get(source));
             return path;
@@ -131,19 +186,24 @@ test("eviction before attachment falls back to temporary output until the media 
     f.plugin.cache.store = async () => cache.path;
     const pending = f.plugin.generate();
     await f.tick();
-    f.complete(); await pending;
+    f.complete();
+    await pending;
     const subtitle = "/private/tmp/plugin/localsub.1/subtitles.srt";
     assert.equal(f.files.has(cache.path), false);
     assert.equal(f.commands[0][1][0], subtitle);
     assert.equal(f.files.has(subtitle), true);
-    f.events.get("mpv.start-file")(); await f.tick();
+    f.events.get("mpv.start-file")();
+    await f.tick();
     assert.equal(f.files.has(subtitle), false);
 });
 
 test("repeating generate does not duplicate a cached track that is already loaded", async () => {
     const f = fixture();
     const cache = enableCache(f, true);
-    f.api.mpv.getNative = name => name === "track-list" ? [{ type: "sub", "external-filename": cache.path, selected: false }] : [];
+    f.api.mpv.getNative = name =>
+        name === "track-list"
+            ? [{ type: "sub", "external-filename": cache.path, selected: false }]
+            : [];
     await f.plugin.generate();
     assert.equal(f.commands.length, 0);
     assert.match(f.messages.at(-1), /already loaded/);
@@ -154,7 +214,9 @@ test("source changes during transcription discard the result rather than cache o
     const cache = enableCache(f);
     f.plugin.cache.unchanged = async () => false;
     const pending = f.plugin.generate();
-    await f.tick(); f.complete(); await pending;
+    await f.tick();
+    f.complete();
+    await pending;
     assert.equal(f.files.has(cache.path), false);
     assert.equal(f.commands.length, 0);
     assert.match(f.messages.at(-1), /media file changed/);
@@ -167,18 +229,23 @@ test("opt-in auto-generation starts once after a local video loads", async () =>
     assert.equal(f.plugin.job, null);
     await f.flushAuto();
     assert.equal(f.plugin.job.automatic, true);
-    f.complete(); await f.tick();
+    f.complete();
+    await f.tick();
     assert.equal(f.commands.length, 1);
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.equal(f.calls.filter(([file]) => file === "/bin/sh").length, 1);
 });
 
 test("failed automatic attempts do not loop or retry on duplicate file-loaded events", async () => {
     const f = fixture();
     f.settings.set("autoGenerate", true);
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
-    f.complete(1, "Transcription failed"); await f.tick();
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
+    f.complete(1, "Transcription failed");
+    await f.tick();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.equal(f.calls.filter(([file]) => file === "/bin/sh").length, 1);
     assert.equal(f.settings.get("jobStatus").busy, false);
     assert.equal(f.settings.get("jobStatus").message, "Transcription failed");
@@ -188,20 +255,24 @@ test("a missing CLI warns once per automatic session while manual retries remain
     const f = fixture();
     f.settings.set("autoGenerate", true);
     f.api.utils.fileInPath = () => false;
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.equal(f.messages.length, 1);
     assert.match(f.messages[0], /Install or choose LocalSub in plugin settings/);
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.equal(f.messages.length, 1);
     await assert.rejects(f.plugin.generate(), /Install or choose LocalSub in plugin settings/);
     f.api.utils.fileInPath = () => true;
     const pending = f.plugin.generate();
     await f.tick();
-    f.complete(); await pending;
+    f.complete();
+    await pending;
     assert.equal(f.commands.length, 1);
     f.events.get("mpv.start-file")();
     f.api.utils.fileInPath = () => false;
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.match(f.messages.at(-1), /Install or choose LocalSub in plugin settings/);
 });
 
@@ -211,7 +282,8 @@ test("auto-generation skips disabled subtitle tracks and network media", async (
         f.settings.set("autoGenerate", true);
         if (subtitles) f.api.mpv.getNative = () => [{ type: "sub", selected: false }];
         else f.api.core.status.isNetworkResource = true;
-        f.events.get("iina.file-loaded")(); await f.flushAuto();
+        f.events.get("iina.file-loaded")();
+        await f.flushAuto();
         assert.equal(f.calls.length, 0);
     }
 });
@@ -220,7 +292,8 @@ test("auto-generation uses cache and never creates a worker when a subtitle appe
     const f = fixture();
     const cache = enableCache(f, true);
     f.settings.set("autoGenerate", true);
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     assert.equal(f.commands[0][1][0], cache.path);
     assert.equal(f.calls.length, 0);
     const second = fixture();
@@ -258,11 +331,13 @@ test("subtitles added during automatic transcription cancel it without attaching
     const f = fixture();
     const cache = enableCache(f);
     f.settings.set("autoGenerate", true);
-    f.events.get("iina.file-loaded")(); await f.flushAuto();
+    f.events.get("iina.file-loaded")();
+    await f.flushAuto();
     f.api.mpv.getNative = () => [{ type: "sub", selected: false }];
     f.events.get("mpv.track-list.changed")();
     assert.equal(f.plugin.job.cancelled, true);
-    f.complete(); await f.tick();
+    f.complete();
+    await f.tick();
     assert.equal(f.commands.length, 0);
     assert.equal(f.files.has(cache.path), false);
 });
@@ -278,7 +353,10 @@ test("startup sets menu state without rebuilding IINA's native player menu", () 
 
 test("only generate and cancel appear in the Plugin menu", () => {
     const f = fixture();
-    assert.deepEqual(f.menuItems.map(item => item.title), ["Generate subtitles", "Cancel generation"]);
+    assert.deepEqual(
+        f.menuItems.map(item => item.title),
+        ["Generate subtitles", "Cancel generation"],
+    );
 });
 
 test("manual generation runs the CLI and attaches subtitles without reopening media", async () => {
@@ -291,7 +369,9 @@ test("manual generation runs the CLI and attaches subtitles without reopening me
     assert.deepEqual(invocation.slice(4), ["/tools/localsub", "/video.mp4", ""]);
     f.complete();
     await pending;
-    assert.deepEqual(f.commands, [["sub-add", ["/private/tmp/plugin/localsub.1/subtitles.srt", "select", "LocalSub"]]]);
+    assert.deepEqual(f.commands, [
+        ["sub-add", ["/private/tmp/plugin/localsub.1/subtitles.srt", "select", "LocalSub"]],
+    ]);
     assert.equal(f.plugin.job, null);
     assert.equal(f.plugin.generateItem.enabled, true);
 });
@@ -299,12 +379,18 @@ test("manual generation runs the CLI and attaches subtitles without reopening me
 test("unsupported recognition stops before creating a worker but cached subtitles still load", async () => {
     const f = fixture();
     const exec = f.api.utils.exec;
-    f.api.utils.exec = async (binary, args) => args[0] === "--capabilities"
-        ? { status: 0, stdout: JSON.stringify({ schemaVersion: 1,
-            localTranscriptionSupported: false }) }
-        : exec(binary, args);
+    f.api.utils.exec = async (binary, args) =>
+        args[0] === "--capabilities"
+            ? {
+                  status: 0,
+                  stdout: JSON.stringify({ schemaVersion: 1, localTranscriptionSupported: false }),
+              }
+            : exec(binary, args);
     await f.plugin.generate();
-    assert.equal(f.calls.some(([binary]) => binary === "/usr/bin/mktemp" || binary === "/bin/sh"), false);
+    assert.equal(
+        f.calls.some(([binary]) => binary === "/usr/bin/mktemp" || binary === "/bin/sh"),
+        false,
+    );
     assert.match(f.messages.at(-1), /On-device subtitle generation isn’t supported on this Mac\./);
     assert.equal(f.settings.get("jobStatus").busy, false);
     enableCache(f, true);
@@ -316,12 +402,15 @@ test("cancellation during capability inspection prevents launching generation", 
     const f = fixture();
     const inspection = deferred();
     const exec = f.api.utils.exec;
-    f.api.utils.exec = async (binary, args) => args[0] === "--capabilities" ? inspection.promise : exec(binary, args);
+    f.api.utils.exec = async (binary, args) =>
+        args[0] === "--capabilities" ? inspection.promise : exec(binary, args);
     const pending = f.plugin.generate();
     await f.tick();
     f.plugin.cancel(false);
-    inspection.resolve({ status: 0, stdout: JSON.stringify({ schemaVersion: 1,
-        localTranscriptionSupported: true }) });
+    inspection.resolve({
+        status: 0,
+        stdout: JSON.stringify({ schemaVersion: 1, localTranscriptionSupported: true }),
+    });
     await pending;
     assert.equal(f.calls.length, 0);
 });
@@ -349,7 +438,9 @@ test("video opening alone never starts generation", () => {
 test("installation before player initialization does not query mpv", () => {
     const f = fixture();
     f.api.core.status.url = null;
-    f.api.mpv.getString = () => { throw new Error("mpv is not initialized"); };
+    f.api.mpv.getString = () => {
+        throw new Error("mpv is not initialized");
+    };
     f.plugin.refresh();
     assert.equal(f.plugin.generateItem.enabled, false);
 });
@@ -390,7 +481,9 @@ test("user subtitle selection changes add the track without selecting it", async
     f.events.get("mpv.sid.changed")();
     f.complete();
     await pending;
-    assert.deepEqual(f.commands, [["sub-add", ["/private/tmp/plugin/localsub.1/subtitles.srt", "auto", "LocalSub"]]]);
+    assert.deepEqual(f.commands, [
+        ["sub-add", ["/private/tmp/plugin/localsub.1/subtitles.srt", "auto", "LocalSub"]],
+    ]);
 });
 
 test("cancellation signals the supervisor and never attaches output", async () => {
@@ -423,12 +516,17 @@ test("cancellation during language resolution does not create temporary files or
     const pending = f.plugin.generate();
     f.plugin.cancel(false);
     await pending;
-    assert.equal(f.calls.some(([file]) => file === "/bin/sh"), false);
+    assert.equal(
+        f.calls.some(([file]) => file === "/bin/sh"),
+        false,
+    );
     assert.equal(f.files.size, 0);
     assert.equal(f.calls.length, 0);
 });
 
-test("cancellation during temporary directory creation removes the directory without launching the runner", { timeout: 5000 }, async () => {
+test("cancellation during temporary directory creation removes the directory without launching the runner", {
+    timeout: 5000,
+}, async () => {
     const f = fixture();
     const temporary = deferred();
     const resume = deferred();
@@ -446,7 +544,10 @@ test("cancellation during temporary directory creation removes the directory wit
     f.plugin.cancel(false);
     resume.resolve();
     await pending;
-    assert.equal(f.calls.some(([file]) => file === "/bin/sh"), false);
+    assert.equal(
+        f.calls.some(([file]) => file === "/bin/sh"),
+        false,
+    );
     assert.equal(f.files.size, 0);
     assert.equal(f.plugin.job, null);
 });

@@ -3,7 +3,9 @@ function canonical(tag) {
     try {
         const result = Intl.getCanonicalLocales(tag.trim().replace(/_/g, "-"))[0];
         return result && result !== "und" ? result : null;
-    } catch (_) { return null; }
+    } catch (_) {
+        return null;
+    }
 }
 
 function equivalent(requested, supported) {
@@ -15,10 +17,16 @@ function equivalent(requested, supported) {
     const matches = supported.filter(value => (canonical(value) || "").split("-")[0] === language);
     if (!matches.length) return null;
     const expanded = new Intl.Locale(tag).maximize();
-    return matches.find(value => {
-        const locale = new Intl.Locale(canonical(value)).maximize();
-        return locale.script === expanded.script && locale.region === expanded.region;
-    }) || matches.find(value => new Intl.Locale(canonical(value)).maximize().script === expanded.script) || null;
+    return (
+        matches.find(value => {
+            const locale = new Intl.Locale(canonical(value)).maximize();
+            return locale.script === expanded.script && locale.region === expanded.region;
+        }) ||
+        matches.find(
+            value => new Intl.Locale(canonical(value)).maximize().script === expanded.script,
+        ) ||
+        null
+    );
 }
 
 async function resolveLanguage(api, binary) {
@@ -27,7 +35,9 @@ async function resolveLanguage(api, binary) {
     const selected = audio.find(track => track.selected);
     // AVAudioFile cannot be instructed to read IINA's selected alternate audio track.
     if (selected && (selected.external || (audio.length > 1 && selected.id !== audio[0].id))) {
-        throw new Error("Selected alternate audio is not supported. Select the primary audio track.");
+        throw new Error(
+            "Selected alternate audio is not supported. Select the primary audio track.",
+        );
     }
     const override = String(api.preferences.get("language") || "").trim();
     if (override) {
@@ -38,15 +48,20 @@ async function resolveLanguage(api, binary) {
     const preferred = api.mpv.getNative("alang") || api.mpv.getString("alang") || [];
     const preferences = Array.isArray(preferred) ? preferred : String(preferred).split(",");
     const candidates = [
-        ...(selected && selected.lang ? [{ tag: selected.lang, source: "audio-track language" }] : []),
+        ...(selected && selected.lang
+            ? [{ tag: selected.lang, source: "audio-track language" }]
+            : []),
         ...preferences.map(tag => ({ tag, source: "IINA audio preferences" })),
     ].filter(candidate => canonical(candidate.tag));
 
     if (candidates.length) {
         const result = await api.utils.exec(binary, ["--languages"]);
-        if (result.status !== 0) throw new Error(result.stderr || "Cannot list supported speech languages.");
-        const supported = result.stdout.split(/\r?\n/)
-            .map(line => line.trim().split(/\s+/)[0]).filter(tag => canonical(tag));
+        if (result.status !== 0)
+            throw new Error(result.stderr || "Cannot list supported speech languages.");
+        const supported = result.stdout
+            .split(/\r?\n/)
+            .map(line => line.trim().split(/\s+/)[0])
+            .filter(tag => canonical(tag));
         if (!supported.length) throw new Error("LocalSub returned no supported speech languages.");
         for (const candidate of candidates) {
             const language = equivalent(candidate.tag, supported);

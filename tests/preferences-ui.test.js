@@ -6,12 +6,35 @@ const vm = require("node:vm");
 
 function fixture() {
     const nodes = new Map();
-    for (const id of ["tool-status", "tool-path", "install-tool", "choose-tool", "check-tool", "clear-cache", "generation-status", "executable-path", "cache-size", "cache-usage"]) {
-        nodes.set(id, { textContent: "", disabled: true, handlers: {}, addEventListener(event, fn) { this.handlers[event] = fn; } });
+    for (const id of [
+        "tool-status",
+        "tool-path",
+        "install-tool",
+        "choose-tool",
+        "check-tool",
+        "clear-cache",
+        "generation-status",
+        "executable-path",
+        "cache-size",
+        "cache-usage",
+    ]) {
+        nodes.set(id, {
+            textContent: "",
+            disabled: true,
+            handlers: {},
+            addEventListener(event, fn) {
+                this.handlers[event] = fn;
+            },
+        });
     }
     const size = nodes.get("cache-size");
-    Object.defineProperty(size, "valueAsNumber", { get: () => size.value === "" ? NaN : Number(size.value) });
-    size.reportValidity = () => Number.isInteger(size.valueAsNumber) && size.valueAsNumber >= 0 && size.valueAsNumber <= 10240;
+    Object.defineProperty(size, "valueAsNumber", {
+        get: () => (size.value === "" ? NaN : Number(size.value)),
+    });
+    size.reportValidity = () =>
+        Number.isInteger(size.valueAsNumber) &&
+        size.valueAsNumber >= 0 &&
+        size.valueAsNumber <= 10240;
     const saved = new Map();
     let cache = { bytes: 0, message: "" };
     const requests = [];
@@ -20,14 +43,46 @@ function fixture() {
     let job = null;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../preferences.js"), "utf8"), {
         document: { getElementById: id => nodes.get(id) },
-        window: { iina: { preferences: {
-            set: (key, value) => { saved.set(key, value); if (key === "toolRequest") requests.push(value); },
-            get: (key, callback) => callback(key === "jobStatus" ? job : key === "cacheSizeMB" ? 100 : key === "cacheStatus" ? cache : state),
-        } } },
-        setInterval: callback => { update = callback; },
+        window: {
+            iina: {
+                preferences: {
+                    set: (key, value) => {
+                        saved.set(key, value);
+                        if (key === "toolRequest") requests.push(value);
+                    },
+                    get: (key, callback) =>
+                        callback(
+                            key === "jobStatus"
+                                ? job
+                                : key === "cacheSizeMB"
+                                  ? 100
+                                  : key === "cacheStatus"
+                                    ? cache
+                                    : state,
+                        ),
+                },
+            },
+        },
+        setInterval: callback => {
+            update = callback;
+        },
         setTimeout: callback => callback(),
     });
-    return { nodes, requests, saved, setCache: value => { cache = value; }, update: () => update(), setState: value => { state = value; }, setJob: value => { job = value; } };
+    return {
+        nodes,
+        requests,
+        saved,
+        setCache: value => {
+            cache = value;
+        },
+        update: () => update(),
+        setState: value => {
+            state = value;
+        },
+        setJob: value => {
+            job = value;
+        },
+    };
 }
 
 test("cache budget saves only valid values and usage is displayed", () => {
@@ -65,7 +120,12 @@ test("settings wait for the global installer to acknowledge requests", () => {
 
 test("failed update checks leave retry and executable selection available", () => {
     const f = fixture();
-    f.setState({ requestId: f.requests[0].id, busy: false, canInstall: false, message: "Not configured" });
+    f.setState({
+        requestId: f.requests[0].id,
+        busy: false,
+        canInstall: false,
+        message: "Not configured",
+    });
     f.update();
     assert.equal(f.nodes.get("install-tool").disabled, true);
     assert.equal(f.nodes.get("choose-tool").disabled, false);
@@ -77,7 +137,12 @@ test("failed update checks leave retry and executable selection available", () =
 test("generation status is shown only when there is activity and cache clearing uses the bridge", () => {
     const f = fixture();
     assert.equal(f.nodes.get("generation-status").hidden, true);
-    f.setState({ requestId: f.requests[0].id, busy: false, canInstall: false, message: "LocalSub 0.1.0" });
+    f.setState({
+        requestId: f.requests[0].id,
+        busy: false,
+        canInstall: false,
+        message: "LocalSub 0.1.0",
+    });
     f.setJob({ message: "Generating subtitles…", busy: true });
     f.update();
     assert.equal(f.nodes.get("generation-status").hidden, false);
@@ -88,7 +153,13 @@ test("generation status is shown only when there is activity and cache clearing 
 
 test("update button clearly distinguishes managed updates from external installation", () => {
     const f = fixture();
-    f.setState({ requestId: f.requests[0].id, busy: false, canInstall: true, message: "LocalSub 0.1.0 · 0.2.0 available", installLabel: "Update" });
+    f.setState({
+        requestId: f.requests[0].id,
+        busy: false,
+        canInstall: true,
+        message: "LocalSub 0.1.0 · 0.2.0 available",
+        installLabel: "Update",
+    });
     f.update();
     assert.equal(f.nodes.get("install-tool").textContent, "Update");
     f.nodes.get("check-tool").handlers.click();

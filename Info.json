@@ -11,12 +11,7 @@
   "entry": "main.js",
   "globalEntry": "global.js",
   "preferencesPage": "preferences.html",
-  "permissions": [
-    "file-system",
-    "show-osd",
-    "show-alert",
-    "network-request"
-  ],
+  "permissions": ["file-system", "show-osd", "show-alert", "network-request"],
   "allowedDomains": ["downloads.junghyuk.com"],
   "preferenceDefaults": {
     "executablePath": "",

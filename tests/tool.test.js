@@ -12,29 +12,58 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 test("capability queries validate the versioned protocol and distinguish unsupported from unknown", async () => {
     async function query(result) {
-        return queryCapabilities({ utils: { exec: async (binary, args) => {
-            assert.equal(binary, "/cli");
-            assert.deepEqual(args, ["--capabilities"]);
-            return result;
-        } } }, "/cli");
+        return queryCapabilities(
+            {
+                utils: {
+                    exec: async (binary, args) => {
+                        assert.equal(binary, "/cli");
+                        assert.deepEqual(args, ["--capabilities"]);
+                        return result;
+                    },
+                },
+            },
+            "/cli",
+        );
     }
     for (const supported of [true, false]) {
-        assert.deepEqual(await query({ status: 0, stdout: JSON.stringify({
-            schemaVersion: 1, localTranscriptionSupported: supported,
-        }) }), { state: supported ? "supported" : "unsupported" });
+        assert.deepEqual(
+            await query({
+                status: 0,
+                stdout: JSON.stringify({
+                    schemaVersion: 1,
+                    localTranscriptionSupported: supported,
+                }),
+            }),
+            { state: supported ? "supported" : "unsupported" },
+        );
     }
-    for (const stdout of ["", "null", "[]", "Usage: localsub", '{}',
+    for (const stdout of [
+        "",
+        "null",
+        "[]",
+        "Usage: localsub",
+        "{}",
         '{"schemaVersion":1,"localTranscriptionSupported":"true"}',
         '{"schemaVersion":1}',
-        '{"schemaVersion":2,"localTranscriptionSupported":true}']) {
+        '{"schemaVersion":2,"localTranscriptionSupported":true}',
+    ]) {
         assert.deepEqual(await query({ status: 0, stdout }), { state: "unknown" });
     }
     assert.equal((await query({ status: 2, stdout: "" })).state, "unknown");
-    const api = { utils: { exec: async () => { throw new Error("Cannot execute"); } } };
+    const api = {
+        utils: {
+            exec: async () => {
+                throw new Error("Cannot execute");
+            },
+        },
+    };
     assert.equal((await queryCapabilities(api, "/cli")).state, "unknown");
 });
 
-test("kernel locks defer installation until generation exits without leaving stale locks", { skip: process.platform !== "darwin", timeout: 15000 }, async () => {
+test("kernel locks defer installation until generation exits without leaving stale locks", {
+    skip: process.platform !== "darwin",
+    timeout: 15000,
+}, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "localsub-lock-test-"));
     let holder;
     let waiter;
@@ -43,12 +72,19 @@ test("kernel locks defer installation until generation exits without leaving sta
         const ready = path.join(root, "ready");
         const published = path.join(root, "published");
         // Keep holding the lock until the test explicitly releases stdin.
-        holder = exec("/usr/bin/lockf", ["-k", lock, "/bin/sh", "-c",
-            'touch "$1"; read -r release', "holder", ready], { timeout: 10000 });
+        holder = exec(
+            "/usr/bin/lockf",
+            ["-k", lock, "/bin/sh", "-c", 'touch "$1"; read -r release', "holder", ready],
+            { timeout: 10000 },
+        );
         for (let attempts = 0; !fs.existsSync(ready) && attempts < 100; attempts++) await delay(10);
         assert.ok(fs.existsSync(ready));
-        await assert.rejects(exec("/usr/bin/lockf", ["-k", "-t", "0", lock, "/usr/bin/true"]), { code: 75 });
-        waiter = exec("/usr/bin/lockf", ["-k", lock, "/usr/bin/touch", published], { timeout: 10000 });
+        await assert.rejects(exec("/usr/bin/lockf", ["-k", "-t", "0", lock, "/usr/bin/true"]), {
+            code: 75,
+        });
+        waiter = exec("/usr/bin/lockf", ["-k", lock, "/usr/bin/touch", published], {
+            timeout: 10000,
+        });
         assert.equal(fs.existsSync(published), false);
         holder.child.stdin.end("\n");
         await Promise.all([holder, waiter]);
@@ -62,14 +98,32 @@ test("kernel locks defer installation until generation exits without leaving sta
     }
 });
 
-test("locked supervisor retains the original application PID across lockf", { skip: process.platform !== "darwin" }, async () => {
+test("locked supervisor retains the original application PID across lockf", {
+    skip: process.platform !== "darwin",
+}, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "localsub-locked-runner-"));
     try {
         const job = path.join(root, "job");
         const binary = path.join(root, "cli");
         fs.mkdirSync(job);
-        fs.writeFileSync(binary, '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\n if [ "$1" = --output ]; then output=$2; shift 2; else shift; fi\ndone\nprintf "%s" "$LOCALSUB_OWNER_PID" > "$output"\n', { mode: 0o700 });
-        await exec("/bin/sh", ["-c", lockedRunner, "localsub-locked-runner", path.join(root, "lock"), runner, job, binary, "/video.mp4", ""]);
+        fs.writeFileSync(
+            binary,
+            '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do\n if [ "$1" = --output ]; then output=$2; shift 2; else shift; fi\ndone\nprintf "%s" "$LOCALSUB_OWNER_PID" > "$output"\n',
+            { mode: 0o700 },
+        );
+        await exec("/bin/sh", [
+            "-c",
+            lockedRunner,
+            "localsub-locked-runner",
+            path.join(root, "lock"),
+            runner,
+            job,
+            binary,
+            "/video.mp4",
+            "",
+        ]);
         assert.equal(fs.readFileSync(path.join(job, "subtitles.srt"), "utf8"), String(process.pid));
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
 });

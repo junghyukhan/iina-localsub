@@ -17,15 +17,19 @@ function fixture() {
     const current = structuredClone(defaults);
     let disk = {};
     let flushes = 0;
-    const api = { preferences: {
-        get: key => current[key],
-        set: (key, value) => { current[key] = value; },
-        sync: () => {
-            assertPropertyList(current);
-            disk = structuredClone(current);
-            flushes++;
+    const api = {
+        preferences: {
+            get: key => current[key],
+            set: (key, value) => {
+                current[key] = value;
+            },
+            sync: () => {
+                assertPropertyList(current);
+                disk = structuredClone(current);
+                flushes++;
+            },
         },
-    } };
+    };
     return { api, current, disk: () => disk, flushes: () => flushes };
 }
 
@@ -67,14 +71,22 @@ test("the global service keeps preferences serializable and saves while the inst
     const f = fixture();
     let timer;
     class BusyInstaller {
-        constructor() { this.busy = true; }
+        constructor() {
+            this.busy = true;
+        }
         handle() {}
     }
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../global.js"), "utf8"), {
         iina: f.api,
-        require: name => name === "./installer.js" ? { ToolInstaller: BusyInstaller }
-            : name === "./settings.js" ? { createSettingsSync } : { createCacheMaintenance: () => () => {} },
-        setInterval: callback => { timer = callback; },
+        require: name =>
+            name === "./installer.js"
+                ? { ToolInstaller: BusyInstaller }
+                : name === "./settings.js"
+                  ? { createSettingsSync }
+                  : { createCacheMaintenance: () => () => {} },
+        setInterval: callback => {
+            timer = callback;
+        },
     });
     f.current.autoGenerate = true;
     timer();

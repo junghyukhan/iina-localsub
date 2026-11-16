@@ -3,9 +3,15 @@
   "version": "0.2.3",
   "private": true,
   "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
+    "format": "biome format --write .",
     "test": "node --test tests/*.test.js",
     "pack": "node scripts/package.js",
     "link": "/Applications/IINA.app/Contents/MacOS/iina-plugin link .",
     "unlink": "/Applications/IINA.app/Contents/MacOS/iina-plugin unlink ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0"
   }
 }

@@ -19,5 +19,6 @@ setInterval(() => {
     const request = iina.preferences.get("toolRequest");
     if (!request || request.id === (lastRequest && lastRequest.id)) return;
     lastRequest = request;
-    if (["install", "choose", "refresh", "clear-cache"].includes(request.action)) installer.handle(request.action, request.id);
+    if (["install", "choose", "refresh", "clear-cache"].includes(request.action))
+        installer.handle(request.action, request.id);
 }, 500);
