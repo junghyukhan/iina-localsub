@@ -3,14 +3,23 @@ const MAX_CACHE_MB = 10240;
 const MB = 1024 * 1024;
 
 function cacheLimitMB(value) {
-    return Number.isInteger(value) && value >= 0 && value <= MAX_CACHE_MB ? value : DEFAULT_CACHE_MB;
+    return Number.isInteger(value) && value >= 0 && value <= MAX_CACHE_MB
+        ? value
+        : DEFAULT_CACHE_MB;
 }
 
 class CachePolicy {
-    constructor(api) { this.api = api; }
-    limit() { return cacheLimitMB(this.api.preferences.get("cacheSizeMB")) * MB; }
+    constructor(api) {
+        this.api = api;
+    }
+    limit() {
+        return cacheLimitMB(this.api.preferences.get("cacheSizeMB")) * MB;
+    }
     changed() {
-        this.api.preferences.set("cacheRevision", Date.now().toString(36) + Math.random().toString(36).slice(2));
+        this.api.preferences.set(
+            "cacheRevision",
+            Date.now().toString(36) + Math.random().toString(36).slice(2),
+        );
     }
 
     async prune() {
@@ -19,9 +28,25 @@ class CachePolicy {
         try {
             if (this.api.file.exists(root)) {
                 // find does not follow symlinks. Only generated epoch/hash paths are eligible.
-                const result = await this.api.utils.exec("/usr/bin/find", [root, "-mindepth", "2", "-maxdepth", "2",
-                    "-type", "f", "-name", "*.srt", "-exec", "/usr/bin/stat", "-f", "%Fm:%z:%N", "{}", "+"]);
-                if (result.status !== 0) throw new Error(result.stderr || "Cannot measure subtitle cache.");
+                const result = await this.api.utils.exec("/usr/bin/find", [
+                    root,
+                    "-mindepth",
+                    "2",
+                    "-maxdepth",
+                    "2",
+                    "-type",
+                    "f",
+                    "-name",
+                    "*.srt",
+                    "-exec",
+                    "/usr/bin/stat",
+                    "-f",
+                    "%Fm:%z:%N",
+                    "{}",
+                    "+",
+                ]);
+                if (result.status !== 0)
+                    throw new Error(result.stderr || "Cannot measure subtitle cache.");
                 const entries = result.stdout.split("\n").flatMap(line => {
                     const match = line.match(/^(\d+(?:\.\d+)?):(\d+):(.+)$/);
                     if (!match || !match[3].startsWith(root + "/")) return [];
@@ -34,14 +59,18 @@ class CachePolicy {
                 for (const entry of entries) {
                     if (bytes <= this.limit()) break;
                     const removed = await this.api.utils.exec("/bin/rm", ["-f", "--", entry.path]);
-                    if (removed.status !== 0) throw new Error(removed.stderr || "Cannot trim subtitle cache.");
+                    if (removed.status !== 0)
+                        throw new Error(removed.stderr || "Cannot trim subtitle cache.");
                     bytes -= entry.size;
                 }
             }
             this.api.preferences.set("cacheStatus", { bytes, message: "" });
             return true;
         } catch (error) {
-            this.api.preferences.set("cacheStatus", { bytes, message: "Cannot manage subtitle cache." });
+            this.api.preferences.set("cacheStatus", {
+                bytes,
+                message: "Cannot manage subtitle cache.",
+            });
             this.api.console.error("Subtitle cache maintenance: " + String(error));
             return false;
         }
@@ -56,14 +85,31 @@ function createCacheMaintenance(api) {
     let retryAt = 0;
     let busy = false;
     return async () => {
-        const signature = JSON.stringify([api.preferences.get("cacheSizeMB"), api.preferences.get("cacheRevision")]);
-        if (busy || signature === completed || (signature === failed && Date.now() < retryAt)) return;
+        const signature = JSON.stringify([
+            api.preferences.get("cacheSizeMB"),
+            api.preferences.get("cacheRevision"),
+        ]);
+        if (busy || signature === completed || (signature === failed && Date.now() < retryAt))
+            return;
         busy = true;
         try {
-            if (await policy.prune()) { completed = signature; failed = ""; }
-            else { failed = signature; retryAt = Date.now() + 5000; }
-        } finally { busy = false; }
+            if (await policy.prune()) {
+                completed = signature;
+                failed = "";
+            } else {
+                failed = signature;
+                retryAt = Date.now() + 5000;
+            }
+        } finally {
+            busy = false;
+        }
     };
 }
 
-module.exports = { CachePolicy, createCacheMaintenance, cacheLimitMB, DEFAULT_CACHE_MB, MAX_CACHE_MB };
+module.exports = {
+    CachePolicy,
+    createCacheMaintenance,
+    cacheLimitMB,
+    DEFAULT_CACHE_MB,
+    MAX_CACHE_MB,
+};

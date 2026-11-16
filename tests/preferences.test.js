@@ -26,7 +26,12 @@ test("preferences use IINA bindings with labels and persistent help text", () =>
     ]) {
         assert.ok(Object.hasOwn(info.preferenceDefaults, key));
         assert.match(html, new RegExp(`<label for="${id}">`));
-        assert.match(html, new RegExp(`<input id="${id}"[^>]*data-pref-key="${key}"[^>]*aria-describedby="${description}"`));
+        assert.match(
+            html,
+            new RegExp(
+                `<input id="${id}"[^>]*data-pref-key="${key}"[^>]*aria-describedby="${description}"`,
+            ),
+        );
         assert.match(html, new RegExp(`id="${description}"`));
     }
     assert.match(html, /<script src="preferences\.js" defer><\/script>/);
@@ -60,5 +65,8 @@ test("settings keep technical controls collapsed", () => {
     assert.match(primary, /Transcription stays on your Mac\./);
     assert.doesNotMatch(advanced, /id="cache-size"|id="cache-usage"|id="clear-cache"/);
     assert.doesNotMatch(primary, /id="choose-tool"|id="tool-path"/);
-    assert.doesNotMatch(html, /Homebrew|\/opt\/homebrew|Automatic language:|checksum|notarized|models may download/i);
+    assert.doesNotMatch(
+        html,
+        /Homebrew|\/opt\/homebrew|Automatic language:|checksum|notarized|models may download/i,
+    );
 });

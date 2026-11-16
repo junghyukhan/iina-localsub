@@ -3,7 +3,10 @@ const assert = require("node:assert/strict");
 const { compareVersions, validateManifest, fetchRelease, MANIFEST_URL } = require("../releases.js");
 
 const manifest = {
-    version: "0.1.0", platform: "macos", arch: "arm64", minimumMacOS: "26.0",
+    version: "0.1.0",
+    platform: "macos",
+    arch: "arm64",
+    minimumMacOS: "26.0",
     url: "https://downloads.junghyuk.com/localsub/releases/0.1.0/localsub-macos-arm64.tar.gz",
     sha256: "a".repeat(64),
 };
@@ -29,25 +32,43 @@ test("universal and Intel release metadata is accepted", () => {
 
 test("invalid schema and unsafe archive locations are rejected", () => {
     for (const fields of [
-        { version: "0.1" }, { version: "01.1.0" }, { version: "1.0.0-beta" },
-        { version: "999999999999999999.0.0" }, { platform: "linux" }, { arch: "unknown" },
-        { minimumMacOS: "invalid" }, { sha256: "bad" },
+        { version: "0.1" },
+        { version: "01.1.0" },
+        { version: "1.0.0-beta" },
+        { version: "999999999999999999.0.0" },
+        { platform: "linux" },
+        { arch: "unknown" },
+        { minimumMacOS: "invalid" },
+        { sha256: "bad" },
         { url: manifest.url.replace("https:", "http:") },
         { url: manifest.url.replace("downloads.junghyuk.com", "evil.example") },
-        { url: manifest.url.replace("downloads.junghyuk.com", "downloads.junghyuk.com.evil.example") },
+        {
+            url: manifest.url.replace(
+                "downloads.junghyuk.com",
+                "downloads.junghyuk.com.evil.example",
+            ),
+        },
         { url: manifest.url.replace("/0.1.0/", "/0.2.0/") },
         { url: manifest.url + "?redirect=https://evil.example" },
         { url: manifest.url.replace("localsub-macos-arm64", "../localsub-macos-arm64") },
-    ]) assert.throws(() => validateManifest({ ...manifest, ...fields }));
+    ])
+        assert.throws(() => validateManifest({ ...manifest, ...fields }));
     for (const value of [null, [], "text", {}]) assert.throws(() => validateManifest(value));
 });
 
 test("HTTP data and text responses are supported without browser fetch APIs", async () => {
-    for (const response of [{ statusCode: 200, data: manifest }, { statusCode: 200, text: JSON.stringify(manifest) }]) {
-        const result = await fetchRelease({ http: { get: async url => {
-            assert.equal(url, MANIFEST_URL);
-            return response;
-        } } });
+    for (const response of [
+        { statusCode: 200, data: manifest },
+        { statusCode: 200, text: JSON.stringify(manifest) },
+    ]) {
+        const result = await fetchRelease({
+            http: {
+                get: async url => {
+                    assert.equal(url, MANIFEST_URL);
+                    return response;
+                },
+            },
+        });
         assert.equal(result.version, "0.1.0");
     }
 });

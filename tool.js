@@ -2,8 +2,11 @@ function findExecutable(api) {
     const configured = String(api.preferences.get("executablePath") || "").trim();
     if (configured) return api.utils.resolvePath(configured);
     const managed = api.utils.resolvePath("@data/bin/localsub");
-    return [managed, "/opt/homebrew/bin/localsub", "/usr/local/bin/localsub"]
-        .find(path => path && api.utils.fileInPath(path)) || null;
+    return (
+        [managed, "/opt/homebrew/bin/localsub", "/usr/local/bin/localsub"].find(
+            path => path && api.utils.fileInPath(path),
+        ) || null
+    );
 }
 
 // Older external CLIs may not implement this query.
@@ -12,7 +15,11 @@ async function queryCapabilities(api, binary) {
         const result = await api.utils.exec(binary, ["--capabilities"]);
         if (result.status !== 0) return { state: "unknown" };
         const value = JSON.parse(result.stdout);
-        if (!value || value.schemaVersion !== 1 || typeof value.localTranscriptionSupported !== "boolean") {
+        if (
+            !value ||
+            value.schemaVersion !== 1 ||
+            typeof value.localTranscriptionSupported !== "boolean"
+        ) {
             return { state: "unknown" };
         }
         return { state: value.localTranscriptionSupported ? "supported" : "unsupported" };

@@ -41,13 +41,17 @@
         pending = true;
         preferences.get("cacheStatus", state => {
             const bytes = state && Number.isFinite(state.bytes) ? state.bytes : 0;
-            const amount = bytes === 0 ? "0 MB" : bytes < 1024 * 1024
-                ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-            const text = state && state.message || `${amount} used`;
+            const amount =
+                bytes === 0
+                    ? "0 MB"
+                    : bytes < 1024 * 1024
+                      ? `${Math.ceil(bytes / 1024)} KB`
+                      : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+            const text = (state && state.message) || `${amount} used`;
             if (cacheUsage.textContent !== text) cacheUsage.textContent = text;
         });
         preferences.get("jobStatus", job => {
-            const message = job && job.message || "";
+            const message = (job && job.message) || "";
             generation.hidden = !message;
             if (generation.textContent !== message) generation.textContent = message;
         });
