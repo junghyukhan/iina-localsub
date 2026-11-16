@@ -19,6 +19,8 @@ test("publication metadata enables IINA GitHub updates and keeps package version
 test("preferences use IINA bindings with labels and persistent help text", () => {
     const html = fs.readFileSync(path.join(__dirname, "..", info.preferencesPage), "utf8");
     assert.match(html, /<html lang="en">/);
+    assert.match(html, /<link rel="stylesheet" href="preferences\.css">/);
+    assert.ok(fs.existsSync(path.join(__dirname, "..", "preferences.css")));
     for (const [key, id, description] of [
         ["executablePath", "executable-path", "executable-help"],
         ["language", "speech-language", "language-help"],

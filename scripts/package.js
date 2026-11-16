@@ -23,6 +23,7 @@ const files = [
     "installer.js",
     "releases.js",
     info.preferencesPage,
+    "preferences.css",
     "preferences.js",
 ];
 execFileSync("/usr/bin/zip", ["-q", archive, ...files], { cwd: root });
