@@ -116,6 +116,7 @@ test("global maintenance serializes scans and notices changes during an in-fligh
         f.prefs.set("cacheSizeMB", 0);
         release();
         await first;
+        assert.equal(f.prefs.get("cacheStatus").bytes, 50, "first scan keeps its original budget");
         const second = tick();
         assert.equal(scans, 2);
         release();

@@ -202,6 +202,18 @@ test("equal and older releases never replace a working managed CLI", async () =>
     }
 });
 
+test("an external CLI selection does not allow downgrading the managed copy", async () => {
+    const external = "/tools/localsub";
+    const f = fixture({ path: external, version: "0.2.0" });
+    f.files.add(managedPath);
+    await f.installer.handle("refresh");
+    assert.equal(f.installer.status.canInstall, false);
+    await f.installer.handle("install");
+    assert.equal(f.downloads.length, 0);
+    assert.equal(f.preferences.get("executablePath"), external);
+    assert.equal(f.preferences.get("installedVersion"), "0.2.0");
+});
+
 test("external CLIs are never overwritten and offer a managed installation instead", async () => {
     const f = fixture({ path: "/existing/localsub" });
     await f.installer.handle("refresh");

@@ -34,6 +34,7 @@ class SubtitleCache {
         return this.exec("/usr/bin/stat", ["-L", "-f", format, path]);
     }
 
+    // A prepared entry captures one media fingerprint and cache epoch; null means bypass caching.
     async prepare(input, binary, language) {
         if (this.policy.limit() === 0) return null;
         try {
@@ -64,19 +65,15 @@ class SubtitleCache {
             ).split(/\s+/)[0];
             if (!/^[a-f0-9]{64}$/.test(digest))
                 throw new Error("Cannot identify the subtitle cache entry.");
-            return {
-                input,
-                media,
-                epoch,
-                root: this.root(epoch),
-                path: this.root(epoch) + "/" + digest + ".srt",
-            };
+            const root = this.root(epoch);
+            return Object.freeze({ input, media, epoch, root, path: root + "/" + digest + ".srt" });
         } catch (error) {
             this.api.console.error("Subtitle cache unavailable: " + String(error));
             return null;
         }
     }
 
+    // Returns a valid cached subtitle and refreshes its recency on a best-effort basis.
     lookup(entry) {
         if (!entry || entry.epoch !== this.epoch() || this.policy.limit() === 0) return null;
         try {
@@ -100,9 +97,14 @@ class SubtitleCache {
         }
     }
 
+    // The caller keeps the original output; a cache failure is not a transcription failure.
     async store(entry, subtitle, canPublish) {
-        if (!entry || entry.epoch !== this.epoch() || !canPublish() || this.policy.limit() === 0)
-            return null;
+        if (!entry) return null;
+        const mayStore = (size = 0) => {
+            const limit = this.policy.limit();
+            return limit > 0 && size <= limit && entry.epoch === this.epoch() && canPublish();
+        };
+        if (!mayStore()) return null;
         let staging = null;
         let snapshot = null;
         let published = false;
@@ -111,7 +113,7 @@ class SubtitleCache {
             const size = Number(await this.exec("/usr/bin/stat", ["-L", "-f", "%z", subtitle]));
             if (!Number.isSafeInteger(size) || size < 0)
                 throw new Error("Cannot measure generated subtitles.");
-            if (size > this.policy.limit()) return null;
+            if (!mayStore(size)) return null;
             await this.exec("/bin/mkdir", ["-p", entry.root]);
             await this.exec("/bin/chmod", ["700", entry.root]);
             staging = await this.exec("/usr/bin/mktemp", [entry.root + "/.pending.XXXXXX"]);
@@ -127,20 +129,15 @@ class SubtitleCache {
             await this.exec("/bin/chmod", ["600", staging]);
             if (!validSubtitle(this.api.file.read(staging, {})))
                 throw new Error("Cannot cache invalid subtitles.");
-            if (!canPublish() || entry.epoch !== this.epoch() || size > this.policy.limit())
-                return null;
+            if (!mayStore(size)) return null;
             // Stage on the cache filesystem for atomic publication.
             const result = await this.api.utils.exec("/bin/ln", [staging, entry.path]);
             published = result.status === 0;
-            if (!published && !this.lookup(entry) && canPublish() && entry.epoch === this.epoch()) {
+            if (!published && mayStore(size) && !this.lookup(entry)) {
                 // Repair only the rejected bytes, not a result another job has replaced.
                 snapshot = staging + ".invalid";
                 await this.exec("/bin/cp", [entry.path, snapshot]);
-                if (
-                    !validSubtitle(this.api.file.read(snapshot, {})) &&
-                    canPublish() &&
-                    entry.epoch === this.epoch()
-                ) {
+                if (!validSubtitle(this.api.file.read(snapshot, {})) && mayStore(size)) {
                     const output = await this.exec("/usr/bin/lockf", [
                         "-k",
                         this.api.utils.resolvePath("@data/subtitles/.repair.lock"),
@@ -155,7 +152,7 @@ class SubtitleCache {
                     published = output === "published";
                 }
             }
-            if (!canPublish() || entry.epoch !== this.epoch() || size > this.policy.limit()) {
+            if (!mayStore(size)) {
                 if (published) await this.api.utils.exec("/bin/rm", ["-f", "--", entry.path]);
                 return null;
             }
@@ -165,13 +162,18 @@ class SubtitleCache {
             return null;
         } finally {
             if (published) this.policy.changed();
-            if (staging)
-                await this.api.utils.exec("/bin/rm", [
-                    "-f",
-                    "--",
-                    staging,
-                    ...(snapshot ? [snapshot] : []),
-                ]);
+            if (staging) {
+                try {
+                    await this.exec("/bin/rm", [
+                        "-f",
+                        "--",
+                        staging,
+                        ...(snapshot ? [snapshot] : []),
+                    ]);
+                } catch (error) {
+                    this.api.console.error("Cannot remove cache staging files: " + String(error));
+                }
+            }
         }
     }
 
@@ -180,9 +182,12 @@ class SubtitleCache {
         const epoch = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
         // Rotate first so clearing cannot delete or repopulate the new cache generation.
         this.api.preferences.set("cacheEpoch", epoch);
-        this.api.preferences.sync();
-        await this.exec("/bin/rm", ["-rf", "--", old]);
-        this.policy.changed();
+        try {
+            this.api.preferences.sync();
+            await this.exec("/bin/rm", ["-rf", "--", old]);
+        } finally {
+            this.policy.changed();
+        }
     }
 }
 

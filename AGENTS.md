@@ -1,0 +1,7 @@
+Optimize for local reasoning with the simplest code that makes behavior clear. A reader should be able to understand a change from the code and the contracts of its immediate dependencies.
+
+- **Keep code and comments lean.** Prefer clear names, types, and direct control flow. Add a helper or abstraction only if it makes the code easier to understand or change. Use short comments for intent, constraints, or trade-offs the code can't express clearly; don't narrate the implementation.
+- **State the contract.** At meaningful boundaries, document only what callers need and can't tell from the interface: non-obvious requirements, guarantees, failure behavior, or side effects. Don't promise incidental details.
+- **Enforce invariants close to the state.** Prefer types and restricted mutation that keep related values consistent. Document an invariant next to its owner when the code alone doesn't make it clear.
+- **Keep effects explicit.** Where it helps, separate decisions from file I/O, preferences, and UI updates. Pass relevant inputs explicitly rather than reaching for global state from decision logic.
+- **Apply this incrementally.** Where a change requires tracing several files to answer a basic question, look for a clearer contract or boundary. Test the guarantees that callers rely on, including meaningful failure cases. Don't add comments or abstractions just to satisfy a checklist.

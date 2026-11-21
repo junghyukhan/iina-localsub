@@ -1,5 +1,4 @@
-const runner = require("./runner.js");
-const { findExecutable, queryCapabilities, lockedRunner } = require("./tool.js");
+const { findExecutable, queryCapabilities, transcribe } = require("./tool.js");
 const { resolveLanguage } = require("./language.js");
 const { SubtitleCache } = require("./cache.js");
 
@@ -82,33 +81,35 @@ class LocalSubPlugin {
         return (this.api.mpv.getNative("track-list") || []).some(track => track.type === "sub");
     }
 
+    shouldAutoGenerate() {
+        return (
+            this.api.preferences.get("autoGenerate") === true &&
+            this.autoAttemptedSession !== this.session &&
+            !!this.currentPath() &&
+            !this.hasSubtitles()
+        );
+    }
+
     scheduleAuto() {
         if (this.autoTimer !== null) this.unschedule(this.autoTimer);
         this.autoTimer = null;
-        if (
-            this.api.preferences.get("autoGenerate") !== true ||
-            !this.currentPath() ||
-            this.autoAttemptedSession === this.session ||
-            this.hasSubtitles()
-        )
-            return;
+        if (!this.shouldAutoGenerate()) return;
         const session = this.session;
         this.autoTimer = this.schedule(() => {
             this.autoTimer = null;
-            if (
-                session !== this.session ||
-                this.job ||
-                !this.currentPath() ||
-                this.api.preferences.get("autoGenerate") !== true ||
-                this.hasSubtitles()
-            )
-                return;
+            if (session !== this.session || this.job || !this.shouldAutoGenerate()) return;
             this.generate({ automatic: true }).catch(error => this.fail(error));
         }, 750);
     }
 
+    // Recheck after async work before starting another step or using its result.
     usable(job) {
-        return this.isCurrent(job) && !job.cancelled && (!job.automatic || !this.hasSubtitles());
+        return (
+            !job.cancelled &&
+            job.session === this.session &&
+            this.currentPath() === job.input &&
+            (!job.automatic || !this.hasSubtitles())
+        );
     }
 
     status(job, message, busy) {
@@ -118,7 +119,6 @@ class LocalSubPlugin {
     }
 
     attach(job, subtitle, cached = false) {
-        if (!this.usable(job)) return;
         const exists = (this.api.mpv.getNative("track-list") || []).some(
             track => track.type === "sub" && track["external-filename"] === subtitle,
         );
@@ -174,9 +174,9 @@ class LocalSubPlugin {
                         setup.stderr || "Cannot prepare the LocalSub installation folder.",
                     );
             }
-            if (!this.isCurrent(job) || job.cancelled) return;
+            if (!this.usable(job)) return;
             const resolved = await resolveLanguage(this.api, binary);
-            if (!this.isCurrent(job) || job.cancelled) return;
+            if (!this.usable(job)) return;
             this.api.console.log(
                 `Speech language: ${resolved.language || "automatic"} (${resolved.source})`,
             );
@@ -194,77 +194,43 @@ class LocalSubPlugin {
             }
             this.status(job, "Generating subtitles…", true);
             this.notify("Generating subtitles…");
-            const temporary = await this.api.utils.exec("/usr/bin/mktemp", [
-                "-d",
-                this.api.utils.resolvePath("@tmp/localsub.XXXXXX"),
-            ]);
-            if (temporary.status !== 0)
-                throw new Error(temporary.stderr || "Cannot create a temporary directory.");
-            job.directory = temporary.stdout.trim();
-            if (!job.directory.startsWith("/") || !this.api.file.exists(job.directory)) {
-                throw new Error("Cannot locate the temporary subtitle directory.");
-            }
-            if (!this.isCurrent(job) || job.cancelled) return;
-            const invocation = managed
-                ? [
-                      "-c",
-                      lockedRunner,
-                      "localsub-locked-runner",
-                      this.api.utils.resolvePath("@data/bin/.localsub.lock"),
-                      runner,
-                      job.directory,
-                      binary,
-                      input,
-                      resolved.language,
-                  ]
-                : [
-                      "-c",
-                      runner,
-                      "localsub-runner",
-                      job.directory,
-                      binary,
-                      input,
-                      resolved.language,
-                  ];
-            const result = await this.api.utils.exec(
-                "/bin/sh",
-                invocation,
-                undefined,
-                undefined,
-                message => {
-                    this.api.console.log(String(message).trim());
-                },
-            );
-            if (!this.isCurrent(job) || job.cancelled) return;
-            if (result.status !== 0) {
-                throw new Error(
-                    managed && result.status === 75
-                        ? "LocalSub is busy. Try again when generation or installation finishes."
-                        : (result.stderr || `localsub exited with status ${result.status}.`).trim(),
-                );
-            }
+            job.directory = await this.createJobDirectory();
+            if (!this.usable(job)) return;
+            await transcribe(this.api, {
+                directory: job.directory,
+                binary,
+                input,
+                language: resolved.language,
+                lockPath: managed ? this.api.utils.resolvePath("@data/bin/.localsub.lock") : null,
+            });
+            if (!this.usable(job)) return;
             const subtitle = job.directory + "/subtitles.srt";
             if (!this.api.file.exists(subtitle) || !this.api.file.read(subtitle, {}).trim()) {
                 throw new Error("No speech subtitles were generated.");
             }
-            if (!this.usable(job)) return;
-            if (entry && !(await this.cache.unchanged(entry)))
-                throw new Error("The media file changed during generation. Try again.");
-            const saved =
-                entry && (await this.cache.store(entry, subtitle, () => this.usable(job)));
+            let saved = null;
+            if (entry) {
+                const unchanged = await this.cache.unchanged(entry);
+                if (!this.usable(job)) return;
+                if (!unchanged)
+                    throw new Error("The media file changed during generation. Try again.");
+                saved = await this.cache.store(entry, subtitle, () => this.usable(job));
+            }
             if (!this.usable(job)) return;
             const available = saved && this.api.file.exists(saved) ? saved : null;
-            if (!available) this.directories.add(job.directory);
+            if (!available) {
+                // IINA can reopen the attached file until this playback session ends.
+                this.directories.add(job.directory);
+                job.directory = null;
+            }
             this.attach(job, available || subtitle);
         } catch (error) {
-            if (!job.cancelled && this.isCurrent(job)) {
+            if (this.usable(job)) {
                 this.status(job, error.message || String(error), false);
                 this.fail(error);
             }
         } finally {
-            if (job.directory && !this.directories.has(job.directory)) {
-                await this.removeDirectory(job.directory);
-            }
+            if (job.directory) await this.removeDirectory(job.directory);
             if (this.job === job) {
                 const current = this.api.preferences.get("jobStatus");
                 if (current && current.id === job.id && current.busy) this.status(job, "", false);
@@ -275,8 +241,22 @@ class LocalSubPlugin {
         }
     }
 
-    isCurrent(job) {
-        return !this.closed && job.session === this.session && this.currentPath() === job.input;
+    async createJobDirectory() {
+        const template = this.api.utils.resolvePath("@tmp/localsub.XXXXXX");
+        const result = await this.api.utils.exec("/usr/bin/mktemp", ["-d", template]);
+        if (result.status !== 0)
+            throw new Error(result.stderr || "Cannot create a temporary directory.");
+        const directory = result.stdout.trim();
+        const prefix = template.slice(0, -6);
+        if (
+            !directory.startsWith("/") ||
+            !directory.startsWith(prefix) ||
+            !/^[a-zA-Z0-9]+$/.test(directory.slice(prefix.length)) ||
+            !this.api.file.exists(directory)
+        ) {
+            throw new Error("Cannot locate the temporary subtitle directory.");
+        }
+        return directory;
     }
 
     cancel(showMessage) {
@@ -303,7 +283,9 @@ class LocalSubPlugin {
 
     async removeDirectory(directory) {
         try {
-            await this.api.utils.exec("/bin/rm", ["-rf", "--", directory]);
+            const result = await this.api.utils.exec("/bin/rm", ["-rf", "--", directory]);
+            if (result.status !== 0)
+                throw new Error(result.stderr || `rm exited ${result.status}.`);
         } catch (error) {
             this.api.console.error("Cannot remove temporary subtitles: " + String(error));
         }
